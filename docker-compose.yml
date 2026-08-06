@@ -1,0 +1,9 @@
+services:
+  scp:
+    build: .
+    environment:
+      # optional — set to route the LLM leg to a real Claude model; unset => deterministic mock
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    # `docker-compose up` runs the end-to-end demo on the bundled fixture.
+    command: python demo.py
+    # run the suite with:  docker-compose run --rm scp pytest -q

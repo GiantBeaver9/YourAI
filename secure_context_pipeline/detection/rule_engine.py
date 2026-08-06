@@ -93,7 +93,11 @@ class RuleEngineDetector:
         for label_re, et, conf in self.label_rules:
             for m in re.finditer(label_re, text):
                 start = m.end()
-                tail = text[start:start + 80]
+                # same-line only: a bare column header ("MRN" above a table) must NOT capture
+                # the next line's value. Stacked-label layouts are scoped designed-not-built.
+                line_end = text.find("\n", start)
+                stop = line_end if line_end != -1 else len(text)
+                tail = text[start:min(stop, start + 80)]
                 if et is EntityType.NAME:
                     vm = _TITLECASE_RUN.match(tail)
                 elif et is EntityType.DOB:

@@ -39,7 +39,7 @@ def _ssn_ok(s: str) -> bool:
 STANDARD_RULES: list[RuleSpec] = [
     RuleSpec(EntityType.SSN, r"\b\d{3}-\d{2}-\d{4}\b", validator=_ssn_ok, confidence=0.95, name="ssn-dashed"),
     RuleSpec(EntityType.EMAIL, r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b", confidence=0.98, name="email"),
-    RuleSpec(EntityType.PHONE, r"\b\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b", confidence=0.9, name="phone"),
+    RuleSpec(EntityType.PHONE, r"\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b", confidence=0.9, name="phone"),
     RuleSpec(EntityType.CREDIT_CARD, r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b", validator=_luhn_ok, confidence=0.9, name="cc"),
     RuleSpec(EntityType.IP, r"\b\d{1,3}(?:\.\d{1,3}){3}\b", confidence=0.9, name="ip"),
     RuleSpec(EntityType.URL, r"\bhttps?://\S+\b", confidence=0.95, name="url"),
@@ -54,13 +54,14 @@ STANDARD_RULES: list[RuleSpec] = [
 ]
 
 # --- label-driven (no universal format -> the label types the value) ---
-# handled specially by the rule engine: (label regex, entity type, confidence)
+# A label REQUIRES a delimiter (:/#) and stays on one line (spaces/tabs, never \n), so a bare
+# column header ("MRN" atop a table) is not a label and won't capture the next line's value.
 LABEL_RULES: list[tuple[str, EntityType, float]] = [
-    (r"(?i)\b(?:MRN|medical record(?:\s*(?:number|no|#))?)\s*[:#]?\s*", EntityType.MRN, 0.9),
-    (r"(?i)\b(?:account|acct)\s*(?:number|no|#)?\s*[:#]?\s*", EntityType.ACCOUNT, 0.85),
-    (r"(?i)\b(?:member|policy|insurance)\s*(?:id|number|no|#)?\s*[:#]?\s*", EntityType.INSURANCE_ID, 0.85),
-    (r"(?i)\b(?:patient\s+name|name|guarantor)\s*[:#]\s*", EntityType.NAME, 0.9),
-    (r"(?i)\b(?:date\s+of\s+birth|DOB|birth\s*date)\s*[:#]?\s*", EntityType.DOB, 0.95),
+    (r"(?i)\b(?:MRN|medical record(?:[ \t]*(?:number|no|#))?)[ \t]*[:#][ \t]*", EntityType.MRN, 0.9),
+    (r"(?i)\b(?:account|acct)(?:[ \t]*(?:number|no|#))?[ \t]*[:#][ \t]*", EntityType.ACCOUNT, 0.85),
+    (r"(?i)\b(?:member|policy|insurance)(?:[ \t]*(?:id|number|no|#))?[ \t]*[:#][ \t]*", EntityType.INSURANCE_ID, 0.85),
+    (r"(?i)\b(?:patient[ \t]+name|name|guarantor)[ \t]*[:#][ \t]*", EntityType.NAME, 0.9),
+    (r"(?i)\b(?:date[ \t]+of[ \t]+birth|DOB|birth[ \t]*date)[ \t]*[:#][ \t]*", EntityType.DOB, 0.95),
 ]
 
 # --- clinical quasi-identifiers: detected so the policy can PRESERVE them explicitly ---

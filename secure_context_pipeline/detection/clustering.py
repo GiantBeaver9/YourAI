@@ -12,8 +12,25 @@ from ..entities import DetectedEntity, EntityType
 from ..normalize import normalize_value
 
 
+def _consolidate_types(entities: list[DetectedEntity]) -> None:
+    """Same value seen under a specific type (via a label) AND as a bare GENERIC_ID (via the
+    magnitude rule) -> retype the GENERIC_ID hits to the specific type, so one value produces
+    one consistent token instead of `[MRN_..]` in the header and `[GENERIC_ID_..]` in a table."""
+    groups: dict[str, list[DetectedEntity]] = {}
+    for e in entities:
+        groups.setdefault(normalize_value(e.text), []).append(e)
+    for group in groups.values():
+        specific = [e.entity_type for e in group if e.entity_type is not EntityType.GENERIC_ID]
+        if specific:
+            best = max(set(specific), key=specific.count)
+            for e in group:
+                if e.entity_type is EntityType.GENERIC_ID:
+                    e.entity_type = best
+
+
 def assign_clusters(entities: list[DetectedEntity]) -> None:
     """Mutates each entity's ``cluster_id`` to the canonical value it should tokenize under."""
+    _consolidate_types(entities)
     names = [e for e in entities if e.entity_type is EntityType.NAME]
     others = [e for e in entities if e.entity_type is not EntityType.NAME]
 

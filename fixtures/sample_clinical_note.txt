@@ -1,0 +1,22 @@
+CONFIDENTIAL MEDICAL RECORD - Springfield General Hospital
+
+Patient Name: Marcus Webb
+DOB: 07/22/1968        SSN: 481-52-9137        MRN: 00934812
+Address: 4417 Elm Street, Springfield, IL 62704
+Email: marcus.webb@example.com     Phone: (217) 555-0148
+Insurance ID: BCBS4471902
+
+CLINICAL SUMMARY
+Marcus is a 57-year-old Han Chinese male presenting with atrial fibrillation.
+Started on warfarin 5 mg daily. Given his ancestry, CYP2C9/VKORC1 sensitivity was
+considered before dosing. HCV viral load 128000 copies/mL. Take 2 tablets every 8 hours.
+
+LAB RESULTS
+Test            Value            MRN
+Platelets       247000 /uL       00934812
+Glucose         98 mg/dL         00934812
+
+Follow-up: Marcus Webb returns on 08/15/2025 for an INR check.
+
+_______________________________
+Marcus Webb, Patient Signature
