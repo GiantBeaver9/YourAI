@@ -28,6 +28,44 @@ PDF ingester and a toy vault.
 
 ---
 
+## THESIS: determinism is the security control
+
+YourAI's own framing is the key: *"contractual guarantees are not sufficient — we
+need a **technical** guarantee."* Extend that one step and it indicts the popular
+answer to this whole challenge:
+
+> **A probabilistic detector is not a sufficient technical guarantee either.**
+
+The crowd reaches for "use an LLM to find and redact the PII." That move quietly makes
+a model's *recall* the security boundary — and if the model is remote, you've **leaked
+raw PII to detect the leak.** Worse, you can't *prove* anything about a stochastic
+component: you can't run it 100× and assert byte-identical safe output, you can't
+reproduce a leak to fix it, you can't hand an auditor a deterministic guarantee.
+
+Our thesis: **the security-critical path is deterministic and rule-anchored.**
+- The load-bearing transform is a **keyed HMAC** — same input + same session key →
+  same token, every single run. Reversible *only* with the session key. Provable.
+- Detection is **deterministic-first**: rules/checksums for structured PII (SSN,
+  MRN, account #, dates), then Presidio's spaCy NER (inference is deterministic — no
+  sampling) for names. Same document → same spans, every run.
+- This is what makes the "zero leakage across 100 runs" benchmark *meaningful*
+  rather than a dice roll. An LLM in the security path makes that test unfalsifiable.
+- LLMs, if present at all, are a **recall backstop inside the trust boundary** (ADR-1
+  prod), never the boundary itself.
+
+🎯 **Scoping assumption this buys:** deterministic detection requires a **text layer** —
+readable/extractable PDF/DOCX/TXT, *not* scanned images. OCR reintroduces probability
+and belongs behind the boundary as a separate probabilistic pre-stage. We assume
+extractable text and document scanned-image OCR as a known gap. That is a defensible
+engineering boundary, not a dodge — and stating it is itself the senior signal.
+
+⚠️ Honest distinction: *deterministic* ≠ *complete*. Determinism buys provability and
+auditability (the same doc always yields the same safe output). Detection *recall* is a
+separate axis, handled by defense-in-depth + confidence-gated redaction — never
+conflate "reproducible" with "catches everything."
+
+---
+
 ## ADR-1: Detection engine (the one with a real tradeoff)
 
 Detection is the **recall-critical weakest link**: a false negative means raw PII
@@ -143,7 +181,7 @@ add a third. The README needs a per-entity-type comparison — here's the reason
 | **SSN / MRN / account #** | ✅ opaque, obviously non-real, zero re-identification surface | ⚠️ a fake SSN still *looks* like an SSN → risk the model treats it as real / a real person's number by collision | **Tokenize.** Structured secrets want opacity. |
 | **NAME** | ⚠️ `[PHI_NAME_a3f2]` degrades LLM fluency/coreference; models handle bracket-tokens worse than names | ✅ "Michael Torres" keeps grammar, pronoun agreement, narrative flow → better model reasoning | **Pseudonymize.** Utility win, and the fake carries no real-person link within session. |
 | **DIAGNOSIS / condition** | ✅ safe but the model can't *reason* about `[PHI_DIAGNOSIS_x7a]` clinically | ⚠️ a plausible fake diagnosis could mislead clinical reasoning / hallucinate | Context-dependent — lean tokenize; discuss. |
-| **DATE / DOB** | ⚠️ breaks temporal reasoning ("how long since…") | ✅ **date-shifting** (consistent offset per session) preserves intervals while hiding absolutes | **Pseudonymize via shift.** Classic HIPAA-safe-harbor move. |
+| **DATE / DOB** | ⚠️ breaks temporal reasoning ("how long since…") | ✅ **date-shifting** — but a *fixed global* offset is fallible (one known true date un-shifts everything). Use a **per-record offset** `HMAC(K_s, patient_salt)`: intervals-within-patient survive, offset is unpredictable, ties to the vault primitive | **Pseudonymize via keyed per-record shift.** (MIMIC/i2b2 technique, not a constant offset.) |
 
 🎯 The insight to surface: **the choice is a utility-vs-linkage tradeoff, and it's
 per-entity, not global.** Tokenization maximizes safety and kills semantic utility;
@@ -158,6 +196,48 @@ diagnosis + age + zip). Mitigations to name: per-session non-determinism (can't
 correlate across sessions), tokenize the high-linkage quasi-identifiers even when
 pseudonymizing names, and note that this is *k-anonymity territory* — obfuscation
 reduces but doesn't eliminate inference risk. Saying that out loud is the 10%.
+
+### 🔒 The insight most candidates miss: anonymization is not attribute-neutral
+
+**Some attributes are pure identifiers. Others carry clinical signal that must survive
+de-identification — or the model reasons on wrong data and you get liability without
+knowing it.**
+
+- **Pure identifiers** — name, SSN, MRN, address, email. Removing them costs *zero*
+  clinical utility. Scrub aggressively (tokenize).
+- **Clinically-load-bearing quasi-identifiers** — ethnicity/race, age, sex, weight,
+  pregnancy status. These are re-identification risk *and* medical signal. Blanket
+  anonymization here is actively **dangerous**, because pharmacogenomics is real:
+  - HLA-B\*15:02 screening before carbamazepine in patients of Han Chinese / SE-Asian
+    descent (Stevens-Johnson risk);
+  - warfarin dose sensitivity, G6PD-deficiency prevalence, codeine ultra-rapid-
+    metabolizer frequency — all vary by ancestry.
+  Strip or falsify ethnicity and the model may recommend a drug that is less effective
+  or unsafe for that patient. **Silent harm.**
+
+**Why pseudonymizing a name across ethnic groups is *worse* than tokenizing it:** it
+doesn't merely lose signal, it **injects false signal.** A model infers ancestry from
+"Michael Torres" and reasons on a wrong pharmacogenomic prior. Corollary design rule:
+
+> **Never encode clinical signal in an identifier you are about to scramble.**
+> Separate *identity* from *clinical attributes*. Tokenize the identifier; preserve the
+> load-bearing attribute as an explicit, **de-linked structured fact** ("patient is of
+> Han Chinese descent") — not smuggled through a name.
+
+**The tension, named honestly (this is the liability point):** preserving ethnicity
+improves clinical safety but *raises* re-identification risk — it's a quasi-identifier
+for k-anonymity. There is no free lunch. The answer is that this must be an **explicit,
+auditable policy decision**, surfaced as config — never a silent default buried in a
+generic NER library. The liability lives in the *unexamined* choice.
+
+- Design surface: `preserve_clinical_signal: [ETHNICITY, AGE_BAND, SEX, WEIGHT]` — a
+  visible, reviewable knob. Default preserves-with-documentation; a compliance officer
+  can tighten it. The point is the decision is *made on purpose and logged*, not made
+  by accident by whatever the anonymizer happened to catch.
+
+🎯 This reframes the whole task from "scrub PII" to "**maximize privacy subject to
+preserving decision-relevant signal**" — and it's the clearest evidence that a human,
+not an LLM, designed this system.
 
 ---
 
@@ -252,10 +332,26 @@ README.md       threat model, ADR summaries, entity-type comparison, gaps, next-
 6. Required tests + demo.py — 0:45
 7. README (fold in these ADRs) — 0:45
 
-## Open questions to settle before build
+## Settled decisions
 
-1. Ship one custom recognizer in the demo to *prove* extensibility? (I say yes.)
-2. Per-entity strategy routing in the demo, or global-with-config + discuss routing in
-   README? (Routing is ~1 config map — I'd do it; it's a visible differentiator.)
-3. SQLCipher vs. app-layer AES-GCM for the vault store — the crypto reasoning matters
-   more than the choice; app-layer AES-GCM is easier to *show* being applied correctly.
+1. **Ship a custom recognizer in the demo** (e.g. synthetic MRN format) — proves the
+   "new entity = config only" extensibility path end-to-end, not just in prose.
+2. **Per-entity strategy routing is in-scope for the demo** — a config map:
+   identifiers → tokenize, DOB → keyed date-shift, clinical quasi-identifiers →
+   preserve-per-policy. This *is* the ADR-3 insight made executable; it's the visible
+   differentiator, not a nice-to-have.
+3. **Vault store: app-layer AES-256-GCM in the demo, SQLCipher/Postgres+KMS in prod.**
+   App-layer is the better *teaching* choice — a reviewer watches encryption applied
+   correctly rather than trusting the DB to do it invisibly. README states the prod swap.
+
+## Standing design rules (carry into every module)
+
+- **Determinism in the security path.** No stochastic component decides what leaves the
+  boundary. HMAC tokenization + rule-first detection. (THESIS)
+- **Text-layer assumption.** Extractable text in; scanned-image OCR is a documented gap.
+- **Never encode clinical signal in an identifier you scramble.** Identity and
+  clinical attributes are separate concerns. (ADR-3)
+- **Confidence-gated degradation is a security default:** below threshold → redact,
+  never pass through.
+- **Nothing original in logs or on the wire** — token IDs and ciphertext only; assert
+  it with tests, don't assume it.
