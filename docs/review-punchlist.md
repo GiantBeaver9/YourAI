@@ -3,6 +3,14 @@
 Surviving findings from a hostile completeness review. WIP-whining and already-owned items
 (async-at-the-edges, heuristics-as-tradeoffs) filtered out. Status tracked here.
 
+## Decisions locked this session
+- **R4 token grammar → bracketed `[TYPE_hex]`** (unambiguous guard > fluency; type field aids restore).
+- **R2 guard** → derive regex from the *same* grammar constant as the tokenizer; auto-resolved by R4.
+- **R10 collision** → fixed width ≥32 bits, **delete the extend path** (no variable length → determinism holds).
+- **R1 coreference** → wire string-clustering before HMAC, hash the cluster canonical; delete "free collapse"/"overscrub".
+- **R6 detector (proposed, pending push-back)** → deterministic rules core IS the demo detector (labels + magnitude + structured-ID regex + rules engine over line-based text); Presidio = prose-name mop-up only; CUT expensive layout parse (PDF coords, table columns, multi-column) as designed-not-built.
+- **R3 injector** → NOT assumed; drawn from scratch *after* R6 settles (it assembles detector output).
+
 ## Must-fix (real holes, load-bearing)
 
 | # | Finding | Files | Fix | Status |
