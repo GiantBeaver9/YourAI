@@ -38,13 +38,16 @@ The original PII never enters the payload — it lives in the vault. Consequence
 
 ---
 
-## 3. Verify-before-send — the real seam control (D)
+## 3. Verify-before-send — a REQUIRED enterprise gate (D)
 
-Before sending, the injector scans the assembled payload for **any** session-known original
-value; on any hit it **fails closed and does not send**. This is:
+Before **any** payload leaves, the injector scans the assembled bytes for **any**
+session-known original value; on any hit it **fails closed and does not send**. Not optional
+belt-and-suspenders — a **required gate** for anything enterprise-grade handling PHI: verify
+one last time, then ship. *You don't leave your keys in the FedEx package.* It is:
 - the runtime twin of the zero-leakage property test (same oracle, live);
-- belt-and-suspenders to the obfuscation — most implementations *trust* that obfuscation
-  ran; we *assert* it at the wire.
+- the assertion that obfuscation actually ran — we never *trust* it did, we *check* at the wire.
+
+Applies per-chunk too: every chunk is verified before it goes out (§5).
 
 ---
 
@@ -55,21 +58,42 @@ values — **preserve them verbatim**, never expand/translate/reformat/invent th
 entities *by token*, and treat the **type tag as the role** (NAME vs DIAGNOSIS vs MRN) for
 relational reasoning.
 
-- **Purpose: de-obfuscation correctness (20%),** not security. If the model paraphrases
+- **Purpose 1 — de-obfuscation correctness (20%).** If the model paraphrases
   `[NAME_a3f2...]` into "the patient," restoration has nothing to restore. Models largely
-  preserve opaque bracketed strings on their own, so this is **cheap insurance** to trim
-  paraphrase/coreference at the margin.
+  preserve opaque bracketed strings on their own, so this trims paraphrase/coreference at
+  the margin.
+- **Purpose 2 — task cooperation.** A model hitting a wall of `[NAME_x]` tokens with no
+  explanation can get confused and **refuse the task outright** — models balk at heavy
+  redaction they don't understand. The prompt ("these are placeholders, reason with them")
+  keeps it cooperating instead of rejecting. This is the bigger of the two purposes.
 - Fence the document (untrusted) from the instruction block for **task integrity** — though
   per §2 even a successful injection cannot leak PHI.
 
 ---
 
-## 5. Chunking — single-payload MVP (C)
+## 5. Chunking — built: concurrent, order-preserving (C)
 
-A 2,000-word document fits one Claude context with room to spare → **single payload** for the
-demo. Chunking is the **scale** path (the 50-page brief): obfuscate-before-chunk (fixed
-ordering) with a **no-split-tokens** guarantee (never break a `[TYPE_hex]` across a boundary).
-Marked **designed-not-built** for the deliverable.
+Single call when the document fits one context (best — the model sees everything). When it
+exceeds the window, chunk **concurrently** and reassemble **in order**:
+
+```
+obfuscate WHOLE doc                       # tokens already consistent across chunks (A8)
+  → split on no-split-token boundaries    # never break a [TYPE_hex] across a chunk edge
+  → verify-before-send each chunk (§3)
+  → asyncio.gather(concurrent LLM calls)  # hard concurrency; real async, not theater
+  → reassemble responses BY INDEX         # gather preserves order; chunks numbered as a belt
+  → de-obfuscate the reassembled whole
+```
+
+**Why the concurrency is clean:** because we obfuscate the *whole* document before chunking,
+the vault is **read-only during the LLM phase** — concurrent chunk calls physically cannot
+race it. No locking needed on the hot path.
+
+⚠️ **Honest scope line:** ordered reassembly of chunk *responses* works for **map-style**
+tasks (per-chunk extract/transform). A question needing **global** reasoning over an
+over-context document needs **map-reduce** (summarize chunks → combine), not concatenation —
+a harder scale tier, **designed-not-built**. Single-call covers the demo; concurrent chunking
+covers over-context map-style; map-reduce is the flagged next tier.
 
 ---
 

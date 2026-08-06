@@ -21,8 +21,10 @@ Surviving findings from a hostile completeness review. WIP-whining and already-o
 - **R3 injector → DRAWN** (llm-injector.md): inline preservation, **sidecar killed** (C2
   resolved — de-linking comes from the name being a token, not relocating facts); security is
   the stripping (injection can't leak what was never sent); verify-before-send is the seam
-  control; prompt is a minor de-obf-fidelity lever, not security; single-payload MVP,
-  chunking designed-not-built.
+  control (REQUIRED enterprise gate, per-chunk too); prompt earns its keep (de-obf fidelity
+  + task cooperation, still not security). Chunking BUILT: single-call when it fits,
+  concurrent + order-preserving when over-context (vault read-only during LLM phase → no
+  race); map-reduce for global-reasoning-over-huge-docs is the designed-not-built tier.
 
 ## Must-fix (real holes, load-bearing)
 
