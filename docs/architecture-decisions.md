@@ -276,24 +276,35 @@ synthetic-test-data** contexts — we just don't default to it clinically, and w
 **All individual-related dates (DOB, admission, discharge, death, …) → drop month + day,
 keep year.** This is exactly HIPAA Safe Harbor #3, applied uniformly. It introduces a
 **third obfuscation primitive: generalization** (reduce precision), alongside
-tokenization and pseudonymization.
+tokenization and pseudonymization. Two age-driven branches handle the corners:
 
-- **One-way and vault-free by design.** The kept year is *truthful*, so there is **nothing
-  to reverse** — the LLM sees `1973`, references `1973`, the user sees `1973` (and holds
-  the full record anyway). Date de-obfuscation disappears as a problem. (Interface note:
-  not every `ObfuscationStrategy` needs a reverse mapping — generalization/suppression
-  populate no vault entry.)
-- **Age ≥ 90 → "90+".** The one case where even the year is generalized — Safe Harbor's
-  own exception, because extreme age is itself a re-identifier.
-- **Known gap — pediatric under-5:** dates *preserved* (dosing can be day-precise; the
-  clinical need and the identifier are the same field). Known PHI leak → **route to
-  human.** This is exactly why fail-closed-to-human exists as a real path.
-- 🔴 **Detection recall still matters:** a missed date leaks the full real date. But it's
-  now a *plain* leak, not a correlation tell (no per-doc randomization to be inconsistent
-  with). Dates get label-driven + format-regex detection; misses fail closed.
-- **Accepted limitation:** within-year intervals ("length of stay", "3 days before") are
-  lost — inherent to Safe Harbor, consistent with "months and days matter less." Not a
-  novel gap; the regulation's own trade.
+```
+age = today − DOB                    # requires DOB detected AND parsed first
+if age <= 5:    ROUTE_TO_HUMAN       # pediatric: dosing is day-precise → preserve, human handles
+elif age >= 90: DELETE_ALL_DATES     # extreme age: even year is age-indicative (Safe Harbor)
+                + collapse Age → "90+"   #   ...and the Age field MUST collapse too, or it re-leaks
+else:           GENERALIZE_TO_YEAR   # default: drop month+day, keep year
+```
+
+- **Default (generalize) is one-way and vault-free.** The kept year is *truthful*, so
+  there is **nothing to reverse** — the LLM sees `1973`, references `1973`, the user sees
+  `1973`. Date de-obfuscation disappears. (Interface note: not every `ObfuscationStrategy`
+  needs a reverse mapping — generalization/suppression populate no vault entry.)
+- **≥90 branch — delete dates *and* collapse age.** Deleting DOB while leaving "Age: 94"
+  re-leaks the exact 90+ signal the branch exists to hide. The two moves are one rule.
+- **≤5 branch — route to human.** Dates preserved; clinical need and identifier are the
+  same field. Conservative default: **any** DOB ≤5 in the doc routes it (we don't yet
+  distinguish patient-DOB from a sibling's — over-route is the safe demo default; refining
+  "whose DOB" is prod).
+- **Branches sit downstream of DOB detection.** No DOB detected → no age → leak (the
+  recall guarantee upstream is what makes these reachable). An *unparseable* DOB
+  (`01/02/03`) yields no reliable age → conservative default is **route to human**, not
+  silent generalize.
+- 🔴 **Detection recall still matters:** a missed date leaks the full real date — now a
+  *plain* leak (no per-doc randomization, so no correlation tell). Label-driven +
+  format-regex detection; misses fail closed.
+- **Accepted limitation:** within-year intervals ("length of stay") are lost — Safe
+  Harbor's own trade, consistent with "months and days matter less."
 
 🔒 Q3 (adversary has obfuscated doc + response): with **tokenization** the adversary sees
 affect-neutral tokens — no name, no bias vector, no realistic values to anchor on. They
