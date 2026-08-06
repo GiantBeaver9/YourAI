@@ -265,41 +265,35 @@ entity's name.
 | **NAME** | **Tokenize** | Bias neutralization (above) + de-obf is catchable (fails loud); pseudonym reintroduces bias *and* fails silent |
 | **SSN / MRN / account #** | **Tokenize** | Opaque, zero re-identification surface; a fake ID can collide with a real one |
 | **DIAGNOSIS / condition** | Tokenize (default) | Model can't safely reason on a *fake* diagnosis; preserve real clinical facts as explicit signal instead |
-| **DATE / DOB** | **Keep year, randomize month+day** | Year → age is the clinical signal; month/day are pure identifier. See date rules + gaps below |
+| **DATE (all individual dates)** | **Generalize to year** (drop month+day) | Exact Safe Harbor; year is truthful → no reversal needed. See date rules below |
 | **Clinical signal** (age<90, sex, ethnicity) | **Preserve** (not obfuscated) | Decision-relevant, Safe-Harbor-permitted (regulatory-entity-rules.md) |
 
 Pseudonymization is still implemented and correct for **restore-tolerant / fluency /
 synthetic-test-data** contexts — we just don't default to it clinically, and we say why.
 
-### Date handling (revised per design review)
+### Date handling — generalization to year (the simple, compliant answer)
 
-- **DOB → keep the year, randomize month + day.** `1/4/1973 → 12/15/1973`. Age (the
-  clinical signal) is preserved; the finer identifier is destroyed. Simpler than a keyed
-  interval-preserving offset, and interval preservation is unnecessary for the DOB case.
-- ⚠️ **Correction to an earlier claim:** month/day randomization is **not** arithmetically
-  reversible and **does not preserve intervals** — restoration (if a date is referenced
-  back) is a **vault lookup**, and dates *are* grammar-detectable in the response (unlike
-  fake names), so de-obf can find and resolve them, with the caveat that a date the model
-  *computed itself* must not be wrongly "restored."
-- **Scope: DOB only.** We obfuscate *date of birth* and leave other dates (admission,
-  discharge, lab, visit) untouched. This dissolves the interval-corruption problem (we
-  never touch the dates whose intervals matter) at the cost of a **documented Safe Harbor
-  deviation** — §164.514 lists admission/discharge/death dates as identifiers. Defensible
-  scope decision for the deliverable; a *chosen* boundary, flagged, not silent. Prod can
-  extend the same machinery to those dates.
-- **Known gap — pediatric under-5:** DOB is *preserved* (some dosing is precise to the
-  day; the clinical need and the identifier are the same field). A known PHI leak →
-  **route to human.** Not worth a clever transform — this is exactly why fail-closed-to-
-  human exists as a real path.
-- 🔴 **DOB recall is now load-bearing (the "pattern" failure).** Because DOB is the *only*
-  date obfuscated, the entire date guarantee rests on catching every DOB. A partial miss
-  is worse than a generic leak: since we randomize **per-document**, a leaked
-  *un-randomized* DOB is **consistent across documents** while obfuscated ones differ —
-  so a miss becomes a **cross-document correlation tell** that fingers the real value.
-  → DOB gets the strictest detection: **label-driven AND format-regex**, high recall,
-  misses fail closed. The "many DOBs → can't tell which is which" obscurity is weak
-  secondary defense; the randomization is the real control and one miss collapses the
-  obscurity.
+**All individual-related dates (DOB, admission, discharge, death, …) → drop month + day,
+keep year.** This is exactly HIPAA Safe Harbor #3, applied uniformly. It introduces a
+**third obfuscation primitive: generalization** (reduce precision), alongside
+tokenization and pseudonymization.
+
+- **One-way and vault-free by design.** The kept year is *truthful*, so there is **nothing
+  to reverse** — the LLM sees `1973`, references `1973`, the user sees `1973` (and holds
+  the full record anyway). Date de-obfuscation disappears as a problem. (Interface note:
+  not every `ObfuscationStrategy` needs a reverse mapping — generalization/suppression
+  populate no vault entry.)
+- **Age ≥ 90 → "90+".** The one case where even the year is generalized — Safe Harbor's
+  own exception, because extreme age is itself a re-identifier.
+- **Known gap — pediatric under-5:** dates *preserved* (dosing can be day-precise; the
+  clinical need and the identifier are the same field). Known PHI leak → **route to
+  human.** This is exactly why fail-closed-to-human exists as a real path.
+- 🔴 **Detection recall still matters:** a missed date leaks the full real date. But it's
+  now a *plain* leak, not a correlation tell (no per-doc randomization to be inconsistent
+  with). Dates get label-driven + format-regex detection; misses fail closed.
+- **Accepted limitation:** within-year intervals ("length of stay", "3 days before") are
+  lost — inherent to Safe Harbor, consistent with "months and days matter less." Not a
+  novel gap; the regulation's own trade.
 
 🔒 Q3 (adversary has obfuscated doc + response): with **tokenization** the adversary sees
 affect-neutral tokens — no name, no bias vector, no realistic values to anchor on. They

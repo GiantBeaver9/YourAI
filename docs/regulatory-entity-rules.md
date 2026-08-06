@@ -41,11 +41,14 @@ determinism-or-refuse posture.**
 
 ### Dates
 - Date elements *directly related to an individual* (DOB, admission, discharge, death)
-  → **remove / generalize to year**, or **date-shift** (per-record `HMAC(k_doc, salt)`
-  offset) when interval preservation matters clinically. Reversible by arithmetic (safe).
-- **Not every date is PII:** a dosing interval ("every 4 hours"), a lab-result *value*,
-  a generic protocol date may be clinical. Classify by **context/label**, don't blanket-
-  strip — else you break temporal reasoning (utility).
+  → **generalize to year** (drop month + day). This is Safe Harbor #3 verbatim. The kept
+  year is truthful → one-way, vault-free, no restoration. Uniform rule, all such dates.
+- **Not every date is an individual date:** a dosing interval ("every 4 hours"), a
+  lab-result *value*, a generic protocol date are not dates-about-the-individual and stay.
+  Classify by **context/label** so temporal reasoning survives where it isn't an identifier.
+- **Accepted limitation:** within-year intervals (length of stay) are lost — Safe Harbor's
+  own trade. **Exception — pediatric under-5:** dates preserved (day-precise dosing) →
+  route to human.
 
 ### Ages
 - Age **< 90** is **preserved** — Safe Harbor permits it and it's clinical signal.
