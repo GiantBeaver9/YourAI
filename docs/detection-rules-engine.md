@@ -1,11 +1,14 @@
 # Detection Rules Engine — detection as data, not code
 
-The endpoint of the config-driven thesis: detection is **one interpreter iterating a table
-of rules.** The structural parser, the magnitude rules, the Safe Harbor recognizers, and
-deployment-specific rules are all the *same shape* — an anchor, a pattern, a boundary, an
-action. Standard rules ship vetted with an on/off flag; custom rules are deployment rows in
-their own table. Adding an entity type is a **row**, not a deploy — the extensibility NFR at
-its strongest.
+The endpoint of the config-driven thesis: detection rules are **data**, and the executor is
+**Presidio** — we do NOT hand-roll a matcher. The magnitude rules, the Safe Harbor
+recognizers, and deployment-specific rules are all the *same shape* — an anchor, a pattern,
+a boundary, an action — and each **compiles into a Presidio recognizer** (`PatternRecognizer`
+with context words for the anchors, or a custom `EntityRecognizer`) and registers into
+Presidio's `RecognizerRegistry`. Our front end holds the logic and the rules; **Presidio
+runs detection.** Standard rules ship vetted with an on/off flag; custom rules are deployment
+rows that compile the same way. Adding an entity type is a **row**, not a deploy — the
+extensibility NFR at its strongest, and it rides the defined tool instead of replacing it.
 
 ---
 

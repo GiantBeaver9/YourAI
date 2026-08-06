@@ -8,7 +8,16 @@ Surviving findings from a hostile completeness review. WIP-whining and already-o
 - **R2 guard** → derive regex from the *same* grammar constant as the tokenizer; auto-resolved by R4.
 - **R10 collision** → fixed width ≥32 bits, **delete the extend path** (no variable length → determinism holds).
 - **R1 coreference** → wire string-clustering before HMAC, hash the cluster canonical; delete "free collapse"/"overscrub".
-- **R6 detector (proposed, pending push-back)** → deterministic rules core IS the demo detector (labels + magnitude + structured-ID regex + rules engine over line-based text); Presidio = prose-name mop-up only; CUT expensive layout parse (PDF coords, table columns, multi-column) as designed-not-built.
+- **R6 detector → Presidio IS the detection substrate (the defined tool); we build AROUND it.**
+  Custom recognizers encode domain PHI Presidio lacks (MRN/account formats, magnitude+unit
+  context, "identifier vs clinical number"). Presidio's custom-recognizer registry = the
+  "build around" API + config-only extensibility. Reinventing NER was the wrong prize —
+  the points are in DOMAIN JUDGMENT, not detection mechanism. The differentiator lives in
+  the downstream **classification + obfuscation + policy layer** (tokenize/generalize/preserve,
+  age branches, bias-neutralization, Safe Harbor mapping, QI policy) — that's where "do you
+  understand what PHI is and WHY" is demonstrated. PHI = health-info ∩ identifiability; the
+  protected thing is the *link to a person* (re-identification risk), not the medical fact.
+  Expensive layout parse (PDF coords, table columns, multi-column) stays designed-not-built.
 - **R3 injector** → NOT assumed; drawn from scratch *after* R6 settles (it assembles detector output).
 
 ## Must-fix (real holes, load-bearing)

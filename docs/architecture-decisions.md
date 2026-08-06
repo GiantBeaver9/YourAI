@@ -368,6 +368,7 @@ ObfuscationPolicy:
   preserve_sex:       true
   age_mode:           exact | band | token      # default exact (<90), band/token = stricter
   multi_record_strict: false        # multi-patient table → escalate QI treatment
+  image_quarantine_threshold: 0.05  # fraction 0.0–1.0 and/or abs page count; 0/1-page = strictest
   policy_version:     "v1"
 ```
 

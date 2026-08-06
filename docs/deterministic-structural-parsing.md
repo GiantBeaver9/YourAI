@@ -151,9 +151,28 @@ This needs a cheap **parseability classifier** up front: detect multi-column tex
 (x-coordinate clustering), detect absence of a text layer (scanned), detect structural
 chaos → REJECT before parsing. Detecting-to-reject ≪ parsing, so it's affordable.
 
-**Open:** reject granularity — whole-document vs per-page/region quarantine (process the
-clean 48 pages, human-review the 2 messy ones). Per-region = better utility, more
-plumbing; whole-doc = simpler, safer default.
+### Image / no-text-layer pages — per-page quarantine + document threshold (decided)
+
+A page with **no extractable text** (a scanned image) is a leak we cannot see: there's no
+text to detect PHI in, so we must not pass it through. But nuking the whole document over
+one image page throws away good context needlessly. So:
+
+- **Per-page quarantine.** A page with ~zero extractable text → **quarantine it**: exclude
+  it from the LLM payload, never send it, and **surface it to the user** ("page N
+  quarantined — image, no readable text, may contain PHI, not processed") so they know
+  context is missing.
+- **Document threshold → human, on a configurable sliding scale.** If quarantined pages
+  exceed the tenant's tolerance, route the **whole doc to human review** — too much is
+  invisible to trust the remainder. But there is **no one-size-fits-all** number: one shop
+  wants human review if **a single page** is unreadable; another tolerates **600 of 3,200**.
+  So `image_quarantine_threshold` is a **per-tenant policy knob** expressible as a **fraction
+  (0.0–1.0)** *and/or* an **absolute page count** — set it to `0` / `1 page` for
+  "any missing page → human," or `0.2` for the litigation shop. Default ~5–10%. Below
+  threshold: quarantine the bad pages, process the rest.
+- 🔒 **No OCR, no multimodal escape hatch.** We do *not* OCR-and-hope (probabilistic →
+  breaks the determinism thesis, may miss PHI) and we do *not* ship the image to a
+  multimodal LLM (it would happily read the PHI — faces, handwriting — straight off the
+  page). Fail closed: quarantine, don't reconstruct.
 
 ⚠️ Overcut philosophy justification: a missing word or two is recoverable — a human can
 blot the rest, and utility degrades gracefully. A leaked PHI value is **not**
