@@ -39,10 +39,12 @@ class ObfuscationResult:
 
 
 def resolve_overlaps(entities: list[DetectedEntity]) -> list[DetectedEntity]:
-    """Greedy by (confidence, span length) -> disjoint set. Higher-confidence span wins an
-    overlap; ties break to the longer span."""
+    """Greedy by (span length, confidence) -> disjoint set. The LONGER span wins an overlap so
+    an enclosed fragment can never beat the entity that contains it (e.g. a bare `00` inside an
+    SSN whose validator lowered its confidence); ties break to higher confidence. This is the
+    overcut-safe choice — prefer masking the wider span."""
     chosen: list[DetectedEntity] = []
-    for e in sorted(entities, key=lambda x: (x.confidence, x.end - x.start), reverse=True):
+    for e in sorted(entities, key=lambda x: (x.end - x.start, x.confidence), reverse=True):
         if not any(e.overlaps(c) for c in chosen):
             chosen.append(e)
     return sorted(chosen, key=lambda x: x.start)

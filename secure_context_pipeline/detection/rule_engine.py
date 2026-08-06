@@ -23,7 +23,7 @@ from .rules import (
     STANDARD_RULES,
 )
 
-_MAGNITUDE = re.compile(r"\b\d{5,}\b|\b0\d+\b")          # 5+ digit run OR leading-zero run
+_MAGNITUDE = re.compile(r"\b\d{5,}\b|\b0\d{3,}\b")       # 5+ digit run OR leading-zero run (4+ digits)
 _TITLECASE_RUN = re.compile(r"[A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+){0,3}")  # one line — never cross \n
 _ALNUM_VALUE = re.compile(r"[A-Za-z0-9][A-Za-z0-9\-]*")
 _DATE_VALUE = re.compile(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\b(?:1[89]\d\d|20\d\d)\b")

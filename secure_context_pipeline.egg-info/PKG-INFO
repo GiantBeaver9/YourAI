@@ -1,0 +1,19 @@
+Metadata-Version: 2.4
+Name: secure-context-pipeline
+Version: 0.1.0
+Summary: PII/PHI obfuscation between a document store and external LLM providers.
+Requires-Python: >=3.10
+Requires-Dist: cryptography>=42
+Requires-Dist: faker>=25
+Provides-Extra: presidio
+Requires-Dist: presidio-analyzer>=2.2; extra == "presidio"
+Requires-Dist: spacy>=3.7; extra == "presidio"
+Provides-Extra: llm
+Requires-Dist: anthropic>=0.40; extra == "llm"
+Provides-Extra: docs
+Requires-Dist: pypdf>=4; extra == "docs"
+Requires-Dist: python-docx>=1; extra == "docs"
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
+Requires-Dist: hypothesis>=6; extra == "dev"
