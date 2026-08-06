@@ -40,35 +40,35 @@ not permitting leaks.
 
 ---
 
-## 3. The number problem — identifier vs clinical (the crux)
+## 3. The number problem — magnitude is the discriminator
 
-A bare digit run is ambiguous. Medicine is *full* of load-bearing numbers we must NOT
-touch: `2 tablets`, `every 4 hours`, `BP 120/80`, `HbA1c 6.5`, `500 mg`, `O2 94%`. Blanket
-"redact all numbers" is **clinically dangerous** — same class of harm as ADR-3's
-pharmacogenomics point. So:
+A bare digit run looks ambiguous, but it isn't, because **physiology and sane units bound
+clinical numbers.** Nobody writes `15000mg` — it's `15g`, or `6 x 2500mg`. Units are
+*chosen* to keep the value human-sized (`2 tablets`, `BP 120/80`, `HbA1c 6.5`, `O2 94%`).
+Identifiers have no such bound. So the discriminator is **size and shape**, deterministic
+and tiny — no "clinical region" inference, no allow-list to complete:
 
-**Resolution — format-specific + context-gated, never bare-digit-greedy:**
-1. **Format-specific IDs are safe to catch anywhere** — a dashed SSN, a grouped phone, an
-   email, a Luhn-valid 16-digit card carry enough structure that clinical collision is
-   near-zero. Catch them in prose freely.
-2. **Bare/ambiguous digit runs are context-gated:**
-   - in an **identifier region** (a form field, near an ID label) → redact (overcut);
-   - in a **clinical region** (near dosing/vitals/lab units, or matching a known clinical
-     pattern) → **keep** — it's decision signal.
-3. **Known clinical patterns are protected** (units, vitals, dose forms) — an explicit
-   allow-list that *prevents* redaction, the inverse of the label lexicon.
+1. **5+ consecutive digits → scrub.** Past the unit's job, that magnitude is an identifier,
+   not a measurement. Catches long account/MRN/record numbers and solid-written phones.
+2. **Leading zeros → scrub.** IDs zero-pad; a dose is never `007mg`. Near-zero false positives.
+3. **Separator formats → scrub via regex.** Dashed SSN / grouped phone break the
+   consecutive-digit run (`123-45-6789` → runs of 3/2/4), so they get their own patterns.
+4. **Everything short + separator-free → keep.** It's a clinical value (decision signal).
 
-This **inverts** the naive "scrub every number." The default for an ambiguous bare run in
-a clinical context is **keep** (preserve signal), because a labeled/format-specific ID is
-what we actually leak on, and those we catch deterministically. This is a *conscious*
-inversion, justified by the clinical-signal principle — and it's the one place the
-overcut-everything reflex is deliberately restrained, because here overcut = clinical harm.
+This replaces the earlier fuzzy "identifier-region vs clinical-region" gating — that
+wasn't even deterministic. Magnitude is. And short identifiers aren't a real worry: a
+medical org with a 1–2 digit account number doesn't exist; real IDs are long or zero-padded
+→ caught. Labeled IDs of *any* length are caught upstream by the structural label path.
 
-⚠️ The residual: a truly bare, unlabeled SSN-as-9-digits with no dashes sitting in prose is
-the hard miss. Mitigations: the `\d{9}` variant with SSN validation + proximity to
-name/DOB raises its confidence; below threshold in an identifier-plausible region → redact.
-A genuinely context-free `123456789` is the documented edge — rare, and the structural/label
-path catches the vastly more common labeled case.
+⚠️ **Open — the one real hole (viral loads / raw cell counts):** some genuinely clinical
+numbers *are* 5–6 digits — HIV/HCV viral load (copies/mL), platelet / ANC counts written
+without a unit. Rule (1) would eat them, and a scrubbed viral load can swing treatment.
+Two options, undecided:
+- **(a)** keep a 5+ run **if a clinical unit is adjacent** (`copies/mL`, `/µL`, `x10^9`) —
+  one adjacency check, not an allow-list; or
+- **(b)** accept as a documented known gap.
+Leaning (a) — cheap, and viral load is exactly the number not to delete silently. Not yet
+ratified.
 
 ---
 
@@ -82,8 +82,5 @@ or tune a type.
 ---
 
 ## Open call
-The §3 inversion (ambiguous bare digits in clinical context default to **keep**) trades a
-rare, hard-to-catch bare-SSN-in-prose miss for not destroying clinical numbers. Given the
-domain I believe it's correct — clinical-number destruction is a silent safety event,
-bare-unlabeled-SSN-in-prose is rare and partly caught by validation+proximity. But it *is*
-a deliberate loosening of overcut, so it's your call to ratify.
+The live one is §3's viral-load / raw-cell-count carve-out: keep a 5+ run when a clinical
+unit is adjacent (a) vs. accept it as a known gap (b). Leaning (a). Not yet ratified.
