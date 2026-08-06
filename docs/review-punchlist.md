@@ -18,7 +18,11 @@ Surviving findings from a hostile completeness review. WIP-whining and already-o
   understand what PHI is and WHY" is demonstrated. PHI = health-info ∩ identifiability; the
   protected thing is the *link to a person* (re-identification risk), not the medical fact.
   Expensive layout parse (PDF coords, table columns, multi-column) stays designed-not-built.
-- **R3 injector** → NOT assumed; drawn from scratch *after* R6 settles (it assembles detector output).
+- **R3 injector → DRAWN** (llm-injector.md): inline preservation, **sidecar killed** (C2
+  resolved — de-linking comes from the name being a token, not relocating facts); security is
+  the stripping (injection can't leak what was never sent); verify-before-send is the seam
+  control; prompt is a minor de-obf-fidelity lever, not security; single-payload MVP,
+  chunking designed-not-built.
 
 ## Must-fix (real holes, load-bearing)
 
