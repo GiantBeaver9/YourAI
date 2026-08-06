@@ -1,0 +1,44 @@
+================================================================================
+ST. JUDE MEDICAL CENTER - CLINICAL DISCHARGE & CARE PLAN
+CONFIDENTIAL MEDICAL RECORD
+================================================================================
+
+PATIENT DEMOGRAPHICS & IDENTIFIERS:
+----------------------------------
+Patient Name: Johnathan E. Smith
+Date of Birth: 04/12/1985 (Age: 39 y/o)
+MRN: MRN-8849201
+Account #: ACC-99201948
+SSN: 987-65-4321
+Address: 742 Evergreen Terrace, Springfield, OR 97477
+Phone: (551) 867-5309
+Email: johnathan.smith@example.org
+Insurance ID: INS-44829103
+Emergency Contact: Mary Smith (Wife) - Phone: (551) 867-5310
+
+CLINICAL HISTORY & ENCOUNTER SUMMARY:
+------------------------------------
+Patient Johnathan Smith, a 39-year-old male, presented on 10/15/2024 to Dr. Robert Vance
+reporting severe fatigue and acute cough. Laboratory panel performed on 10/16/2024 revealed
+a viral load of 1500000 copies/mL and absolute CD4 count of 450 cells/mcL.
+
+MEDICATION & DOSING INSTRUCTIONS:
+---------------------------------
+1. Amoxicillin 500mg PO TID for 10 days.
+2. Lisinopril 10mg PO daily.
+3. Acetaminophen 650mg PRN for fever.
+
+LABORATORY VALUES TABLE:
+-----------------------
+Test Name        | Result         | Reference Range
+---------------------------------------------------
+HIV-1 RNA Quant  | 1500000 copies/mL | Not Detected
+WBC Count        | 6500 cells/mcL  | 4500-11000 cells/mcL
+Hemoglobin       | 14.2 g/dL       | 13.8-17.2 g/dL
+
+ATTENDING PHYSICIAN ATTESTATION:
+-------------------------------
+Attending Physician: Dr. Robert Vance, MD (NPI: 1982739401)
+Signature: Dr. Robert Vance, MD
+Date Signed: 10/18/2024
+================================================================================

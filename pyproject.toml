@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "secure_context_pipeline"
+version = "0.1.0"
+description = "PII/PHI obfuscation between document store and external LLM providers"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "cryptography>=41.0.0",
+    "faker>=19.0.0",
+    "presidio-analyzer>=2.2.0",
+    "presidio-anonymizer>=2.2.0",
+    "anthropic>=0.18.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "hypothesis>=6.80.0",
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --asyncio-mode=auto"
+testpaths = [
+    "tests",
+]
