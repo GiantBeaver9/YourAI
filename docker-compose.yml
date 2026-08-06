@@ -1,0 +1,11 @@
+services:
+  scp:
+    build: .
+    environment:
+      # Optional: set to route the LLM leg to a real provider. Empty -> keyless MockProvider.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Optional: fixed master key (64 hex chars). Unset -> ephemeral key generated at runtime.
+      - SCP_MASTER_KEY=${SCP_MASTER_KEY:-}
+    # `docker-compose up` runs the full test suite (incl. the zero-leakage property test) and
+    # then the end-to-end demo on the bundled fixture — reproducibly.
+    command: sh -c "pytest -q && python demo.py"

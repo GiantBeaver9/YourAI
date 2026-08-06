@@ -1,0 +1,17 @@
+# Core (always required)
+cryptography>=41.0
+faker>=24.0
+
+# Detection substrate (intended default). A native-regex fallback runs when these are absent,
+# so keyless CI still works — see secure_context_pipeline/detection/factory.py.
+presidio-analyzer>=2.2
+# Presidio needs a spaCy model at runtime:
+#   python -m spacy download en_core_web_sm
+
+# Real LLM leg (optional — MockProvider is the keyless default)
+anthropic>=0.39
+
+# Test / property-based
+pytest>=8.0
+pytest-asyncio>=0.23
+hypothesis>=6.0
