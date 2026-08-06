@@ -38,16 +38,20 @@ strategy is "safe."
 > and uncatchable. For a fail-closed, provable system, **tokenization is the default for
 > anything that must round-trip.**
 
-### The one safe pseudonymization: date-shift
-Date-shifting reverses by **arithmetic** (apply the inverse per-record offset), not by
-string search — no matching, no ambiguity, no coreference. It is the single
-pseudonymization immune to the asymmetry. Keep it.
+### Dates are less silent than names (but not free)
+Superseded claim: an *arithmetic* offset would reverse cleanly, but the chosen date
+strategy is **keep-year, randomize month+day** (ADR-3) — which is **not** arithmetically
+reversible and restores by **vault lookup**. The saving grace vs. name-pseudonyms: a date
+**still has grammar** (`MM/DD/YYYY`), so de-obf can *pattern-detect* dates in the response
+and resolve them — it doesn't fail as silently as a fake name. Caveat: a date the model
+**computed itself** (a follow-up appointment) must not be wrongly "restored" — only
+vault-known dates are replaced.
 
 ### Routing consequence (feeds ADR-3 config)
 | Entity | Strategy | Why |
 |---|---|---|
 | Identifiers (name, SSN, MRN, acct) — **round-trip-critical** | **Tokenize** | Safe, catchable reversal |
-| Dates / DOB | **Date-shift** | Arithmetic reversal, preserves intervals |
+| Dates / DOB | **Keep year, randomize month+day** | Age preserved; grammar-detectable so restore is tractable; known gaps (under-5, intervals) documented |
 | Fluency-critical, restore-tolerant | Pseudonymize **+ response-side net** | Only where fluency > perfect restore |
 | Clinical signal (age<90, sex, ethnicity) | **Preserve** | Not removed at all (ADR-3 / Safe Harbor) |
 

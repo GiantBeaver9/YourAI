@@ -228,26 +228,75 @@ the user's key — not a leak.
 Shared `ObfuscationStrategy` ABC; both selectable by config; zero harness changes to
 add a third. The README needs a per-entity-type comparison — here's the reasoning:
 
-| Entity type | Tokenization `[PHI_...]` | Pseudonymization (realistic fake) | Recommendation |
-|---|---|---|---|
-| **SSN / MRN / account #** | ✅ opaque, obviously non-real, zero re-identification surface | ⚠️ a fake SSN still *looks* like an SSN → risk the model treats it as real / a real person's number by collision | **Tokenize.** Structured secrets want opacity. |
-| **NAME** | ⚠️ `[PHI_NAME_a3f2]` degrades LLM fluency/coreference; models handle bracket-tokens worse than names | ✅ "Michael Torres" keeps grammar, pronoun agreement, narrative flow → better model reasoning | **Pseudonymize.** Utility win, and the fake carries no real-person link within session. |
-| **DIAGNOSIS / condition** | ✅ safe but the model can't *reason* about `[PHI_DIAGNOSIS_x7a]` clinically | ⚠️ a plausible fake diagnosis could mislead clinical reasoning / hallucinate | Context-dependent — lean tokenize; discuss. |
-| **DATE / DOB** | ⚠️ breaks temporal reasoning ("how long since…") | ✅ **date-shifting** — but a *fixed global* offset is fallible (one known true date un-shifts everything). Use a **per-record offset** `HMAC(K_s, patient_salt)`: intervals-within-patient survive, offset is unpredictable, ties to the vault primitive | **Pseudonymize via keyed per-record shift.** (MIMIC/i2b2 technique, not a constant offset.) |
+We implement **both** strategies behind a shared `ObfuscationStrategy` ABC (PRD
+requirement + the swappability NFR), and both are graded — so both must be good. But for
+**this domain** we take an opinionated default, and the reason is deeper than utility.
 
-🎯 The insight to surface: **the choice is a utility-vs-linkage tradeoff, and it's
-per-entity, not global.** Tokenization maximizes safety and kills semantic utility;
-pseudonymization preserves utility but the realistic value is itself a linkage risk if
-the mapping ever leaks (Q3). Best systems route per entity type — which our config-driven
-strategy selection makes trivial.
+### 🔒 The real rationale for tokenization: bias neutralization, not just privacy
 
-🔒 Q3 (adversary has obfuscated doc + response): with pseudonymization they see a
-*coherent fake* — they can infer structure (there's one patient, one physician, a
-diagnosis) and possibly re-identify via **quasi-identifier combination** (rare
-diagnosis + age + zip). Mitigations to name: per-session non-determinism (can't
-correlate across sessions), tokenize the high-linkage quasi-identifiers even when
-pseudonymizing names, and note that this is *k-anonymity territory* — obfuscation
-reduces but doesn't eliminate inference risk. Saying that out loud is the 10%.
+A realistic pseudonym hides the *identity* but preserves the *bias vectors*. A name —
+even a fake one — still moves clinical decisions:
+- name → inferred **ethnicity** → medication bias (the pharmacogenomic case, ADR-3-clinical),
+- name → inferred **gender / class** → unconscious treatment disparity,
+- name → raw **personal animus** ("this clinician reacts badly to the name Bradley").
+
+`patient_b4mai` carries **none** of that — it is affect-neutral by construction.
+**Tokenization is the only bias-neutral strategy; pseudonymization reintroduces exactly
+the signal we want gone.** So the obfuscation layer is also a **de-biasing layer** — a
+differentiated framing: this isn't only privacy, it's *removing identity-driven bias
+from the reasoning context.*
+
+This sharpens the ADR-3 rule into a clean split:
+> **Identity carries bias signal we eliminate; clinical attributes carry decision signal
+> we preserve.** Strip identity to a neutral token AND surface the clinical facts
+> **explicitly and separately.** The model sees `patient_b4mai, Han Chinese descent,
+> age 62, male` — full decision signal, zero identity bias.
+
+**Mechanism ("advanced find-and-replace"):** choose the canonical token once per entity,
+iterate it across every variant mention in the document (overscrub similar forms), and
+**prime the LLM** so the token *is* the patient's identity for the session — the model is
+pre-tokened into using `patient_*****` as required, so the token effectively becomes the
+entity's name.
+
+### Per-entity strategy table (updated)
+
+| Entity type | Default | Why |
+|---|---|---|
+| **NAME** | **Tokenize** | Bias neutralization (above) + de-obf is catchable (fails loud); pseudonym reintroduces bias *and* fails silent |
+| **SSN / MRN / account #** | **Tokenize** | Opaque, zero re-identification surface; a fake ID can collide with a real one |
+| **DIAGNOSIS / condition** | Tokenize (default) | Model can't safely reason on a *fake* diagnosis; preserve real clinical facts as explicit signal instead |
+| **DATE / DOB** | **Keep year, randomize month+day** | Year → age is the clinical signal; month/day are pure identifier. See date rules + gaps below |
+| **Clinical signal** (age<90, sex, ethnicity) | **Preserve** (not obfuscated) | Decision-relevant, Safe-Harbor-permitted (regulatory-entity-rules.md) |
+
+Pseudonymization is still implemented and correct for **restore-tolerant / fluency /
+synthetic-test-data** contexts — we just don't default to it clinically, and we say why.
+
+### Date handling (revised per design review)
+
+- **DOB → keep the year, randomize month + day.** `1/4/1973 → 12/15/1973`. Age (the
+  clinical signal) is preserved; the finer identifier is destroyed. Simpler than a keyed
+  interval-preserving offset, and interval preservation is unnecessary for the DOB case.
+- ⚠️ **Correction to an earlier claim:** month/day randomization is **not** arithmetically
+  reversible and **does not preserve intervals** — restoration (if a date is referenced
+  back) is a **vault lookup**, and dates *are* grammar-detectable in the response (unlike
+  fake names), so de-obf can find and resolve them, with the caveat that a date the model
+  *computed itself* must not be wrongly "restored."
+- **Known gap 1 — pediatric under-5:** some dosing is precise to the day; those dates
+  *should* be preserved. Date-shifting is the wrong tool here → flag / route to human.
+  Unavoidable: the clinical need and the identifier are the same field.
+- **Known gap 2 — interval-dependent multi-date reasoning:** independently randomizing
+  each date corrupts "started drug 3 days before admission." We **accept and document**
+  this to honor the simplification (DOB is the dominant case); a *chosen* gap, not a
+  silent one. Prod option: per-record uniform offset for event dates where intervals matter.
+
+🔒 Q3 (adversary has obfuscated doc + response): with **tokenization** the adversary sees
+affect-neutral tokens — no name, no bias vector, no realistic values to anchor on. They
+can still infer *structure* (one patient, one physician, a diagnosis) and attempt
+re-identification via **quasi-identifier combination** (rare diagnosis + age + preserved
+ethnicity + ZIP-3). This is *k-anonymity territory* — obfuscation reduces but doesn't
+eliminate inference risk. The preserved clinical quasi-identifiers are the residual
+surface, and that's a **conscious, documented** safety-vs-linkage tradeoff (ADR-3), not
+an oversight. Saying that out loud is the 10%.
 
 ### 🔒 The insight most candidates miss: anonymization is not attribute-neutral
 
