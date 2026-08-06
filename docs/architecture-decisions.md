@@ -435,7 +435,8 @@ token is never split across a chunk boundary.
 
 ## ADR-6: Store & audit (thin but real)
 
-- **Store:** encrypted file store, `cryptography` Fernet (AES-128-CBC+HMAC) or AES-256-GCM,
+- **Store:** encrypted file store, **AES-256-GCM** (NOT Fernet — Fernet is AES-128-CBC and
+  fails the AES-256 requirement; see store-at-rest-crypto.md), envelope key hierarchy,
   **per-user key** (KDF from user secret / KMS in prod). TXT fully; PDF/DOCX behind a
   `DocumentExtractor` interface (pypdf / python-docx) — the interface is the point, edge-case
   parsing is not. Prod: S3/GCS + KMS SSE, per-user prefixes.
@@ -530,7 +531,7 @@ README.md       threat model, ADR summaries, entity-type comparison, gaps, next-
 1. **Ship a custom recognizer in the demo** (e.g. synthetic MRN format) — proves the
    "new entity = config only" extensibility path end-to-end, not just in prose.
 2. **Per-entity strategy routing is in-scope for the demo** — a config map:
-   identifiers → tokenize, DOB → keyed date-shift, clinical quasi-identifiers →
+   identifiers → tokenize, dates → generalize to year (age-branched), clinical quasi-identifiers →
    preserve-per-policy. This *is* the ADR-3 insight made executable; it's the visible
    differentiator, not a nice-to-have.
 3. **Vault store: app-layer AES-256-GCM in the demo, SQLCipher/Postgres+KMS in prod.**
