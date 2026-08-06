@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "secure-context-pipeline"
+version = "0.1.0"
+description = "PII/PHI obfuscation between a document store and external LLM providers."
+requires-python = ">=3.10"
+dependencies = [
+    "cryptography>=42",
+    "faker>=25",
+]
+
+[project.optional-dependencies]
+# Presidio is the detection substrate; pinned in docker. Absent -> native-regex fallback,
+# so `pip install -e . && python demo.py` works out of the box without the heavy spaCy model.
+presidio = ["presidio-analyzer>=2.2", "spacy>=3.7"]
+llm = ["anthropic>=0.40"]
+docs = ["pypdf>=4", "python-docx>=1"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "hypothesis>=6"]
+
+[tool.setuptools.packages.find]
+include = ["secure_context_pipeline*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
