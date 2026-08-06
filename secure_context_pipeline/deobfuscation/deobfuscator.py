@@ -99,30 +99,18 @@ class Deobfuscator:
     async def _restore_pseudonyms(
         self, text: str, session: Session, result: DeobfuscationResult
     ) -> str:
-        """Search the reply for known fake surfaces and restore them. Fakes have no grammar, so
-        this is best-effort entity resolution — documented as fail-silent, which is exactly why
-        tokenization (not this) is the default for round-trip-critical values."""
-        # Longest surfaces first so a full fake name is restored before its bare surname.
+        """Restore known fake surfaces in the reply. We match the **full** fake surface only:
+        restoring a bare partial (a lone fake first name) to the whole original would *expand*
+        it to the wrong text, so partial mentions are left as a documented fail-silent residual
+        — which is exactly why tokenization, not this, is the default for round-trip-critical
+        values. The replacement is applied via a callable so an original containing a backslash
+        or a ``\\g``/``\\1`` sequence is inserted literally, never as a regex template."""
         fakes = [s for s in session.vault.surfaces() if not _TOKEN_CI.fullmatch(s)]
         for fake in sorted(fakes, key=len, reverse=True):
             original = await session.vault.resolve(fake)
             if original is None:
                 continue
-            for needle in self._pseudonym_needles(fake):
-                pattern = re.compile(r"\b" + re.escape(needle) + r"\b")
-                text, n = pattern.subn(original, text)
-                result.pseudonyms_restored += n
+            pattern = re.compile(r"\b" + re.escape(fake) + r"\b")
+            text, n = pattern.subn(lambda _m, _o=original: _o, text)
+            result.pseudonyms_restored += n
         return text
-
-    @staticmethod
-    def _pseudonym_needles(fake: str) -> list[str]:
-        needles = [fake]
-        needles += [part for part in fake.split() if len(part) >= 4]
-        # de-dup, preserve order, longest first
-        seen: set[str] = set()
-        ordered = []
-        for n in sorted(needles, key=len, reverse=True):
-            if n not in seen:
-                seen.add(n)
-                ordered.append(n)
-        return ordered

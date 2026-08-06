@@ -78,6 +78,23 @@ US_STATES = (
     "NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC"
 ).split()
 
+# State codes that are also common lowercase English words. Excluded from the *city* recognizer's
+# lookahead (so "Springfield, or admitted" doesn't read ", or" as Oregon) — the ZIP recognizer
+# still uses the full set because a trailing 5-digit ZIP disambiguates it.
+_AMBIGUOUS_STATES = {"OR", "IN", "OK", "HI", "ME", "OH"}
+CITY_STATES = [s for s in US_STATES if s not in _AMBIGUOUS_STATES]
+
+# Common English words that are also given/family names. A bare capitalized occurrence is more
+# often the word than the person, so name-fragment propagation skips these (the full-name and
+# labeled/NER detections still fire). Avoids tokenizing the verb in "Will the patient return?".
+COMMON_WORD_NAMES = {
+    "will", "may", "mark", "grace", "june", "bill", "rose", "dawn", "hope", "art", "guy",
+    "sun", "faith", "joy", "hazel", "holly", "ivy", "jean", "gene", "frank", "rich", "hero",
+    "major", "pearl", "ray", "dale", "dean", "reed", "victor", "noel", "paige", "clay",
+    "chase", "drew", "grant", "case", "lane", "brook", "brooke", "summer", "sky", "star",
+    "angel", "miles", "rob", "robin", "jack", "mercy", "green", "baker", "young", "day",
+}
+
 # Single-word "names" that are really field labels / section words — dropped when a detector
 # (esp. a statistical NER) mislabels them PERSON. Only filters SINGLE-token matches, so real
 # surnames ("Reyes") are never affected.
@@ -197,6 +214,6 @@ STANDARD_RULES: list[Rule] = [
     # City preceding a state abbrev — Safe Harbor removes geography smaller than a state.
     Rule("city_state", "City (before state)", EntityType.ADDRESS,
          regex=r"[A-Z][a-z]+(?:[ ][A-Z][a-z]+)?",
-         succeeding=r",[ ]+(?:" + "|".join(US_STATES) + r")\b",
+         succeeding=r",[ ]+(?:" + "|".join(CITY_STATES) + r")\b",
          priority=76, confidence=0.8, ignore_case=False),
 ]

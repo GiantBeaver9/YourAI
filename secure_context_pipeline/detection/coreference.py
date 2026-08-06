@@ -23,7 +23,7 @@ from __future__ import annotations
 import re
 
 from ..entities import DetectedEntity, EntityType
-from .rules import HONORIFICS
+from .rules import COMMON_WORD_NAMES, HONORIFICS
 
 _HONORIFIC_SET = {h.lower() for h in HONORIFICS}
 _WORD = re.compile(r"[A-Za-z][A-Za-z'’.-]*")
@@ -72,7 +72,9 @@ def propagate_names(text: str, entities: list[DetectedEntity]) -> list[DetectedE
             full_needles.add(cleaned)
         for tok in toks:
             bare = tok.strip(".,'’")
-            if len(bare) >= 2 and bare[0].isupper():
+            # Skip common English words that are also names — a bare capitalized "Will"/"May" is
+            # usually the word, and propagating it would tokenize (and mis-restore) ordinary prose.
+            if len(bare) >= 2 and bare[0].isupper() and bare.lower() not in COMMON_WORD_NAMES:
                 part_needles.add(bare)
 
     extra: list[DetectedEntity] = []

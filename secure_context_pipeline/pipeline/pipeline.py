@@ -82,6 +82,7 @@ class SecureContextPipeline:
         """Run one document through the full pipeline under a held session lease.
 
         Provide ``text`` directly, or ``user_id`` to read the encrypted store."""
+        await self.sessions.reap_expired()  # crypto-shred any lapsed sessions before we work
         async with session.lease():
             if text is None:
                 if user_id is None:

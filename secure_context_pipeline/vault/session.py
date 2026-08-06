@@ -109,8 +109,22 @@ class SessionManager:
     def get(self, session_id: str) -> Session | None:
         session = self._sessions.get(session_id)
         if session and session.state is SessionState.ACTIVE and session.is_expired():
-            session.state = SessionState.DRAINING  # lazy expiry
+            session.state = SessionState.DRAINING  # lazy expiry; reap_expired() does the shred
         return session
+
+    async def reap_expired(self) -> int:
+        """Destroy every expired session — zeroizing K_s and crypto-shredding its vault.
+
+        The demo has no background timer, so the pipeline calls this opportunistically at the
+        start of each round-trip. That bounds how long an expired session's key material and
+        reversible map linger in memory (prod would run this on a periodic reaper)."""
+        reaped = 0
+        for sid in list(self._sessions):
+            session = self._sessions[sid]
+            if session.is_expired() and session.state is not SessionState.DESTROYED:
+                await self.destroy(sid)
+                reaped += 1
+        return reaped
 
     async def destroy(self, session_id: str) -> None:
         session = self._sessions.pop(session_id, None)

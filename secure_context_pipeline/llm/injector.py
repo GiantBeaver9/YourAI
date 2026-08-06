@@ -20,6 +20,7 @@ verified before it ships.
 from __future__ import annotations
 
 import asyncio
+import re
 
 from ..grammar import TOKEN_REGEX
 from .provider import LLMProvider, LLMRequest
@@ -58,7 +59,19 @@ class ContextInjector:
     @staticmethod
     def _verify_before_send(payload: str, known_originals: set[str]) -> None:
         for original in known_originals:
-            if original and original in payload:
+            if not original:
+                continue
+            # A single plain-alphabetic value (a bare name part) is matched on WORD BOUNDARIES,
+            # so it isn't spuriously found inside an unrelated longer word ("John" within
+            # "Johnson") — which would fail-block a correctly-obfuscated document. Anything with
+            # digits/punctuation (SSN, email, account) uses substring, since those must not
+            # survive even as a fragment.
+            hit = (
+                re.search(r"\b" + re.escape(original) + r"\b", payload) is not None
+                if original.isalpha()
+                else original in payload
+            )
+            if hit:
                 # Fail closed. Do not include the offending value in the error.
                 raise VerifyBeforeSendError(
                     "verify-before-send: a known original value is present in the outbound "

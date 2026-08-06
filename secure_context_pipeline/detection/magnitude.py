@@ -53,7 +53,9 @@ def magnitude_spans(text: str, policy: ObfuscationPolicy) -> list[DetectedEntity
         length = len(run)
         if _unit_adjacent(text, m.end()):
             continue  # lab value / physiologic magnitude — keep it
-        scrub = length >= 5 or (run[0] == "0" and length >= 2)
+        # 5+ digits, or a zero-padded run of 3+ (identifiers are zero-padded; a 2-digit "08"
+        # is usually a clock/room number, so we don't scrub those and mangle clinical text).
+        scrub = length >= 5 or (run[0] == "0" and length >= 3)
         if scrub:
             spans.append(
                 DetectedEntity(
