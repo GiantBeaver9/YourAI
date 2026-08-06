@@ -38,7 +38,7 @@ class Session:
     def __init__(self, session_id: str, user_id: str, ttl_seconds: int = 3600) -> None:
         self.session_id = session_id
         self.user_id = user_id
-        self._root = os.urandom(32)          # K_s — random, ephemeral
+        self._root = bytearray(os.urandom(32))  # K_s — random, ephemeral (mutable for zeroize)
         self.keyring = KeyRing(self._root)
         self.vault = SessionVault(self.keyring)
         self.created_at = time.time()
@@ -51,11 +51,15 @@ class Session:
     def is_expired(self) -> bool:
         return time.time() >= self.expires_at
 
-    def token_for(self, canonical_value: str, type_tag: str) -> str:
-        """Deterministic-in-session token for a canonical (cluster) value."""
+    def token_for(self, canonical_value: str, type_tag: str, doc_id: str = "") -> str:
+        """Deterministic token for a canonical (cluster) value, keyed per document.
+
+        Same value+doc within the session -> same token; a different document -> a different
+        token for the same value (cross-document non-linkability); a new session -> a fresh
+        ``K_s`` -> different tokens entirely (cross-session non-linkability)."""
         from ..grammar import make_token
 
-        return make_token(type_tag, self.keyring.token_digest(canonical_value))
+        return make_token(type_tag, self.keyring.token_digest(canonical_value, doc_id))
 
     @asynccontextmanager
     async def lease(self):

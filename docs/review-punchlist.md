@@ -62,5 +62,8 @@ real pseudonymize behind the ABC + generalize-to-year dates; token-grammar regex
 matching guard; per-user-key AES-256-GCM file store; JSON-lines token-only audit; Hypothesis
 leakage test + 5 scenario tests. **Cut from demo:** RE2 rule-intake + exrex preview panel,
 PDF x-coordinate columns + reading-order reconstruction, multi-column reject classifier,
-viral-load unit-adjacency, versioned ObfuscationPolicy object (→ plain dict), coreference
-beyond exact-normalized (string clustering only if time). Everything cut = README prose.
+map-reduce chunking, OCR. Everything cut = README prose.
+**Kept (ratified after the cut):** viral-load unit-adjacency carve-out (user ratified — cheap,
+rides the structural read); versioned ObfuscationPolicy object (kept, not a dict —
+policy_version is load-bearing for the audit story); string-level coreference clustering
+(wired into token derivation, R1). Per-document keying (`k_doc`) implemented in the foundation.

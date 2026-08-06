@@ -39,8 +39,8 @@ So the security-critical path is **deterministic and rule-anchored**: the load-b
 transform is a keyed HMAC (same input + same session key → same token, every run), and
 detection is rules-first. This is what makes "zero leakage across 100 runs" a *meaningful*
 test instead of a dice roll. LLMs, where present, are a recall backstop *inside* the trust
-boundary — never the boundary itself. (Scoping assumption: extractable-text documents;
-scanned-image pages are quarantined, not OCR-and-hoped.)
+boundary — never the boundary itself. (Scoping assumption: extractable-text documents — see
+Known gaps.)
 
 ---
 
@@ -94,24 +94,32 @@ as designed-not-built here.
 | **Pseudonymize** (realistic fake) | fuzzy — entity-resolution, **fails silent** | yes | restore-tolerant / fluency |
 | **Generalize** (date → year) | no — truthful, one-way | **no** | dates |
 
-### Tokenization vs. pseudonymization — worked, for two entity types
+### Tokenization vs. pseudonymization — worked, per entity type
 
-**NAME.** We **tokenize** (`[NAME_a3f2b1c9d0e1]`), not pseudonymize, for two reasons the
-usual "pseudonyms read better" analysis misses:
-1. **Bias.** A realistic fake name still carries bias vectors — inferred ethnicity → a real
-   pharmacogenomic prior, inferred gender/class → treatment disparity. A token carries none.
-   Tokenization is the only *bias-neutral* strategy; it's a de-biasing layer, not just privacy.
-2. **De-obfuscation.** Tokens fail **loud** — an un-restored token still looks like a token,
-   so the leftover-guard catches it. A missed pseudonym looks like a real name and ships
-   silently. For a fail-closed system, that asymmetry is close to disqualifying for names.
+Both reversible strategies are implemented behind a shared ABC and are config-swappable. Here
+both NAME and SSN land on **tokenize** — for *different* reasons — which is exactly why the
+choice is per-entity, not global:
 
-**DATE / DOB.** We **generalize** to year (drop month/day) — Safe Harbor #3 verbatim. The
-kept year is *truthful*, so there is nothing to reverse and no vault entry; date de-obf
-disappears. Pseudonymizing dates (a fake specific date) would inject false precision the model
-could reason on. Generalization is strictly better here.
+**NAME → tokenize, not pseudonymize.** (1) *Bias:* a realistic fake name still carries bias
+vectors — inferred ethnicity → a real pharmacogenomic prior, inferred gender/class →
+treatment disparity. A token carries none; tokenization is a de-biasing layer, not just
+privacy. (2) *De-obf asymmetry:* tokens fail **loud** (an un-restored token still looks like a
+token → the leftover-guard catches it); a missed pseudonym looks like a real name and ships
+**silently**. For a fail-closed system that asymmetry disqualifies pseudonyms for names.
 
-Both strategies are implemented behind a shared ABC and are config-swappable; the routing is
-per-entity because the right answer *is* per-entity.
+**SSN → tokenize, not pseudonymize.** A *pseudonymized* SSN still looks like a valid SSN and
+can **collide with a real person's number** — inventing valid-looking identifiers is a
+liability. An opaque token can't be mistaken for a real one.
+
+**DATE / DOB → neither: generalize** to year (Safe Harbor #3). Truthful, one-way, no vault
+entry, nothing to restore — strictly better than a fake specific date, which would inject
+false precision the model could reason on.
+
+**Where pseudonymization earns its keep:** a **de-identified export mode** — a realistic-but-
+fake shareable copy of a document (demos, synthetic test datasets, training corpora) where
+realistic values are the *point* and no reversal is needed. Selectable per entity via
+`ObfuscationPolicy`; the fail-silent de-obf risk is moot because these outputs are never
+restored.
 
 ---
 
@@ -139,10 +147,13 @@ the durable per-user store key and the ephemeral `K_s` are deliberately independ
   exfiltrate**; injection can degrade the task, never leak PHI.
 - **Stolen store / DB dump** → AES-256-GCM ciphertext, per-user keys, AAD-bound; cross-user
   and blob-swap attacks fail cryptographically.
-- **Vault compromise** → holds ciphertext + one-way tokens; without the (KMS-held, in prod)
-  session key, no PII. Token-map custody is split from key custody.
-- **Cross-session correlation** → per-document keying means the same patient tokenizes
-  differently across documents; no persistent pseudonym to link on.
+- **Vault compromise** → holds ciphertext + one-way tokens; without the session key, no PII.
+  *(Demo caveat: `K_s` and the vault live in one process, so a live-process compromise takes
+  both; split custody — vault store separate from a KMS-held key — is the prod hardening.)*
+- **Cross-session & cross-document correlation** → a new session mints a fresh random `K_s`,
+  and each document derives its own `k_doc = HKDF(K_s, doc_id)`, so the same patient
+  tokenizes differently across sessions *and* across documents — no persistent pseudonym to
+  link on.
 
 Residual, and named: **quasi-identifier combination** (Sweeney: ZIP+DOB+sex ≈ 87%) survives
 because the model must reason per-patient — governed by an explicit, logged `ObfuscationPolicy`
@@ -153,10 +164,9 @@ knob, not hidden.
 ## What makes this more than a scrubber
 
 PHI is not a checklist of scary words — it's a **re-identification risk judgment** (health
-context ∩ identifiability). That framing drives every decision: generalize dates (kill
-identifier precision, keep clinical year), tokenize identity (bias-neutral), preserve
-clinically-load-bearing quasi-identifiers (ethnicity/age/sex — Safe Harbor permits them and
-pharmacogenomics needs them) under a logged policy, and fail closed on anything unreadable.
+context ∩ identifiability). Every decision above follows from that one framing rather than
+from a field blocklist — which is why we preserve clinically-load-bearing quasi-identifiers
+(ethnicity/age/sex) under a logged policy instead of blindly stripping them.
 
 ---
 
