@@ -182,6 +182,13 @@ loss / a real sentence destroyed.
   keep `45yo male` — ADR-3). Expected count is **per-label**: `First Name:` → 1,
   `Patient Name:` → 2–4. This reconciles overcut-names with preserve-clinical-signal.
   *test: mixed name+age line keeps age; pure name line fully redacted.*
+- **P2c Deterministic name-span via Title-Case run** — keep mixed lines *deterministic*
+  (don't fall to NER): a name is the **leading run of Title-Case words** (capital first
+  letter, rest lower). Redact that run; stop at the first token that breaks the pattern
+  (a digit, ALL-CAPS, all-lower). Defensible because almost nothing else is Title-Case —
+  prescriptions are all-lower or ALL-CAPS, dosages carry digits, clinical markers aren't
+  Title-Case. Overcut-safe and it preserves the determinism guarantee on mixed lines.
+  *test: `John Smith, 45yo` keeps `45yo`, removes the name, no NER invoked.*
 - **P3 Boundary stops at next label, not EOL** (1b) 🔴 — *test: multi-field line masks
   each value independently.*
 - **P4 Label-shaped prose** 🔵 — "the date of birth requirement applies" is not a DOB

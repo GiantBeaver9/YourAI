@@ -194,10 +194,18 @@ Properties, all from one construction:
   coreference collapse *within the doc*, where it actually matters — ADR/earlier note
   that cross-doc identity resolution is explicitly NOT our job).
 - **Irreversibility:** HMAC one-way; slice reveals nothing about the value.
-- **Leak-tracing canary:** the audit vault stores `doc_id ↔ k_doc`. A token found in the
-  wild (a log, a provider trace, a leaked file) traces back to its source document. The
-  token doubles as a **watermark**. Note: the trace key is `(doc_id, token)`, never
-  `token` alone — a bare slice can repeat across documents by design.
+- **Leak-tracing canary — with NO PHI persisted.** Durable storage holds only
+  `token ↔ doc_id` — a *reference* to a document, never its contents. A token found in
+  the wild traces back to its source document via that reference table; the token
+  doubles as a **watermark**. There is no standing re-identification liability, because
+  the value's only durable home is the encrypted document store (under the user key).
+  The token→value reversal map is **session-ephemeral**, destroyed on logout.
+
+**Correcting an earlier over-engineering:** irreversibility is an *external* property.
+YourAI already holds the PHI locally; the guarantee is that the *provider* can't
+reconstruct it. So we do NOT need `k_doc` to remain re-derivable after logout, and we
+never persist key material next to references. Local access to PHI is by design and by
+the user's key — not a leak.
 
 ### Two real constraints this creates
 
@@ -345,6 +353,52 @@ token is never split across a chunk boundary.
   ran. **Gap to admit:** it proves obfuscation *executed*, not that detection had 100%
   recall; a missed entity is invisible to the log. Closing that gap = the egress DLP
   scan from ADR-4 + detection eval metrics. Knowing the gap is the point.
+
+---
+
+## ADR-7: Runtime & language — deliverable vs. production
+
+**Deliverable = Python 3.10+.** The PRD *hard-requires* it (asyncio, pytest,
+pytest-asyncio, Presidio). Deviating risks auto-rejection for a non-differentiating
+reason. We ship Python. Not a debate.
+
+**But the prod language is a legitimate senior discussion, and it exposes a flaw in the
+PRD's own framing** — worth surfacing in the README/live review:
+
+> "asyncio required throughout" conflates I/O-bound and CPU-bound work. Async helps the
+> **LLM call, storage, and vault I/O** (genuinely I/O-bound — asyncio is perfect). It does
+> **nothing** for the **structural parse**, which is **CPU-bound** string/span scanning.
+> Under the GIL, that runs on **one core**. To hit "obfuscate a 2,000-word doc < 2s" —
+> and especially the 50-page brief — Python must push parsing into **multiprocessing or a
+> native extension**; asyncio alone won't do it. Naming this is the senior signal.
+
+Prod candidates for the parsing hot path:
+
+| | For | Against (this workload) |
+|---|---|---|
+| **C#** *(lead prod pick)* | No GIL → parsing **parallelizes across cores** natively; `Span<T>`/`Memory<T>` give **zero-copy, cache-friendly** string scanning (directly kills the cache-miss problem); **OpenXML SDK** parses DOCX structure *exactly* (our best parsing tier); enterprise-grade crypto (`System.Security.Cryptography`), first-class async. Fast end, robust, deep libraries. | Heavier runtime than Go; not as raw-fast as Rust |
+| **Rust** | Fastest, memory-safe, ideal for the span-scanning loop | Slower dev velocity; PDF/DOCX ecosystem thinner; smaller enterprise talent pool |
+| **Go** | Light, great concurrency (goroutines) | "Library-free" — weak PDF/DOCX ecosystem; less expressive typing for a rich parser |
+| **Python** *(the deliverable)* | Fastest to build; best PII/NER ecosystem (Presidio/spaCy); mandated | GIL blocks CPU-bound parsing; boxed objects are **cache-hostile** in tight scan loops |
+
+**Position:** ship the deliverable in Python; in the README argue **C# for prod** — the
+`Span<T>` cache story + OpenXML exact-DOCX + no-GIL parallel parse make it the best fit
+for a document-parsing PHI pipeline, with Rust as the max-throughput alternative. That
+"I know the mandated stack and I know why I'd swap it, specifically" is exactly the
+not-outsourcing-my-brain signal.
+
+⚠️ Pragmatic Python mitigation in the deliverable: keep the parse hot path in tight,
+allocation-light functions; hit the 2,000-word benchmark directly; treat the 50-page
+brief as the *scale* discussion (per-page multiprocessing) rather than a live benchmark.
+
+---
+
+## Safety posture (threat-model line)
+
+**Automation is augmentation, not elimination.** In healthcare the dial is set to
+*as-safe-as-possible*: every ambiguous boundary overcuts, unparseable structure is
+rejected to human review, and low-confidence detection redacts. The system removes toil
+and scales review; it does not remove the human backstop. Fail closed, always.
 
 ---
 
