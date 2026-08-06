@@ -60,15 +60,13 @@ wasn't even deterministic. Magnitude is. And short identifiers aren't a real wor
 medical org with a 1–2 digit account number doesn't exist; real IDs are long or zero-padded
 → caught. Labeled IDs of *any* length are caught upstream by the structural label path.
 
-⚠️ **Open — the one real hole (viral loads / raw cell counts):** some genuinely clinical
-numbers *are* 5–6 digits — HIV/HCV viral load (copies/mL), platelet / ANC counts written
-without a unit. Rule (1) would eat them, and a scrubbed viral load can swing treatment.
-Two options, undecided:
-- **(a)** keep a 5+ run **if a clinical unit is adjacent** (`copies/mL`, `/µL`, `x10^9`) —
-  one adjacency check, not an allow-list; or
-- **(b)** accept as a documented known gap.
-Leaning (a) — cheap, and viral load is exactly the number not to delete silently. Not yet
-ratified.
+**Carve-out (decided): keep a 5+ run when a clinical unit is adjacent.** Some genuinely
+clinical numbers *are* 5–6 digits — HIV/HCV viral load (copies/mL), platelet / ANC counts.
+A scrubbed viral load can swing treatment, so rule (1) yields when a unit token sits next
+to the number (`copies/mL`, `/µL`, `x10^9`). This is **not a fuzzy heuristic** — it rides
+the structural parser: clinical values live under a column header or beside their unit, so
+the adjacency read is the same deterministic structural signal we already use for fields.
+One adjacency check, no allow-list to complete.
 
 ---
 
@@ -81,6 +79,8 @@ or tune a type.
 
 ---
 
-## Open call
-The live one is §3's viral-load / raw-cell-count carve-out: keep a 5+ run when a clinical
-unit is adjacent (a) vs. accept it as a known gap (b). Leaning (a). Not yet ratified.
+## Where numbers get decided in a lab table
+A results table is where the ID rules and the clinical-keep rules meet: **column headers
+type the columns** — scrub the identifier columns (MRN, account, accession), keep the
+value columns — while magnitude + unit-adjacency handle anything free-floating. Same
+structural parser, three rules composing over one grid.
