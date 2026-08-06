@@ -16,12 +16,14 @@ The algorithmically fiddly module, built deliberately:
 
 from __future__ import annotations
 
+import datetime
 from dataclasses import dataclass
 
 from ...audit import AuditEvent, AuditLog
 from ...config import ObfuscationPolicy
-from ...entities import Action, DetectedEntity
+from ...entities import Action, DetectedEntity, EntityType
 from ..strategies import STRATEGY_BY_ACTION, StrategyContext
+from ..strategies.generalization import extract_year
 
 
 class RouteToHumanError(RuntimeError):
@@ -66,13 +68,14 @@ class ObfuscationEngine:
 
     async def obfuscate(self, text: str, session, doc_id: str = "") -> ObfuscationResult:
         entities = resolve_overlaps(await self.detector.detect(text, self.policy))
+        strict_dates = self._age_branch(entities)  # <=5 raises to human; >=90 -> strict dates
         ctx = StrategyContext(session=session, doc_id=doc_id, policy=self.policy)
 
         planned: list[tuple[DetectedEntity, Action, str, str | None]] = []
         canonical_original: dict[str, str] = {}  # token -> longest original surface
 
         for e in entities:
-            action = self._action_for(e)
+            action = self._action_for(e, strict_dates)
             if action is Action.ROUTE_TO_HUMAN:
                 raise RouteToHumanError(f"{e.entity_type.value} requires human review")
             if action is Action.PRESERVE:
@@ -117,7 +120,29 @@ class ObfuscationEngine:
             token_count=len(canonical_original),
         )
 
-    def _action_for(self, e: DetectedEntity) -> Action:
+    def _action_for(self, e: DetectedEntity, strict_dates: bool = False) -> Action:
         if e.confidence < self.policy.confidence_threshold:
             return Action.REDACT  # graceful degradation — under-confident -> redact, never leak
+        if strict_dates:  # >=90: dates are age-indicative -> remove entirely; age -> "90+"
+            if e.entity_type in (EntityType.DATE, EntityType.DOB):
+                return Action.REDACT
+            if e.entity_type is EntityType.AGE:
+                return Action.GENERALIZE
         return self.policy.action_for(e.entity_type)
+
+    def _age_branch(self, entities: list[DetectedEntity]) -> bool:
+        """Age-driven date policy. <= floor -> route to human (fail closed). >= ceiling ->
+        return True so dates are stripped and age collapses to 90+. Downstream of DOB detection."""
+        this_year = datetime.date.today().year
+        for e in entities:
+            if e.entity_type is not EntityType.DOB:
+                continue
+            year = extract_year(e.text)
+            if not year:
+                continue
+            age = this_year - int(year)
+            if age <= self.policy.pediatric_age_floor:
+                raise RouteToHumanError(f"pediatric record (age {age}) requires human review")
+            if age >= self.policy.elderly_age_ceiling:
+                return True
+        return False
