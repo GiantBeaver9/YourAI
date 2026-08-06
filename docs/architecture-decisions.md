@@ -281,13 +281,25 @@ synthetic-test-data** contexts — we just don't default to it clinically, and w
   back) is a **vault lookup**, and dates *are* grammar-detectable in the response (unlike
   fake names), so de-obf can find and resolve them, with the caveat that a date the model
   *computed itself* must not be wrongly "restored."
-- **Known gap 1 — pediatric under-5:** some dosing is precise to the day; those dates
-  *should* be preserved. Date-shifting is the wrong tool here → flag / route to human.
-  Unavoidable: the clinical need and the identifier are the same field.
-- **Known gap 2 — interval-dependent multi-date reasoning:** independently randomizing
-  each date corrupts "started drug 3 days before admission." We **accept and document**
-  this to honor the simplification (DOB is the dominant case); a *chosen* gap, not a
-  silent one. Prod option: per-record uniform offset for event dates where intervals matter.
+- **Scope: DOB only.** We obfuscate *date of birth* and leave other dates (admission,
+  discharge, lab, visit) untouched. This dissolves the interval-corruption problem (we
+  never touch the dates whose intervals matter) at the cost of a **documented Safe Harbor
+  deviation** — §164.514 lists admission/discharge/death dates as identifiers. Defensible
+  scope decision for the deliverable; a *chosen* boundary, flagged, not silent. Prod can
+  extend the same machinery to those dates.
+- **Known gap — pediatric under-5:** DOB is *preserved* (some dosing is precise to the
+  day; the clinical need and the identifier are the same field). A known PHI leak →
+  **route to human.** Not worth a clever transform — this is exactly why fail-closed-to-
+  human exists as a real path.
+- 🔴 **DOB recall is now load-bearing (the "pattern" failure).** Because DOB is the *only*
+  date obfuscated, the entire date guarantee rests on catching every DOB. A partial miss
+  is worse than a generic leak: since we randomize **per-document**, a leaked
+  *un-randomized* DOB is **consistent across documents** while obfuscated ones differ —
+  so a miss becomes a **cross-document correlation tell** that fingers the real value.
+  → DOB gets the strictest detection: **label-driven AND format-regex**, high recall,
+  misses fail closed. The "many DOBs → can't tell which is which" obscurity is weak
+  secondary defense; the randomization is the real control and one miss collapses the
+  obscurity.
 
 🔒 Q3 (adversary has obfuscated doc + response): with **tokenization** the adversary sees
 affect-neutral tokens — no name, no bias vector, no realistic values to anchor on. They
