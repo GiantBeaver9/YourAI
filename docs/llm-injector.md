@@ -71,29 +71,40 @@ relational reasoning.
 
 ---
 
-## 5. Chunking — built: concurrent, order-preserving (C)
+## 5. Chunking — concurrent fan-out, ordered reassembly (C)
 
-Single call when the document fits one context (best — the model sees everything). When it
-exceeds the window, chunk **concurrently** and reassemble **in order**:
+Single call when the doc fits one context. When it doesn't: split into an **ordered list**,
+fire the calls **concurrently** (bounded), and stitch results back **by index** — chunk `i`
+lands in slot `i` no matter when it returns.
 
+```python
+# obfuscate the WHOLE doc first -> tokens already consistent across chunks (A8),
+# so the vault is READ-ONLY during the LLM phase -> concurrent calls can't race it, no locks.
+chunks = split_no_split_tokens(obfuscated_text)   # ordered; never cut a [TYPE_hex] in half
+sem = asyncio.Semaphore(max_in_flight)            # bound concurrency (API rate limits)
+
+async def run(chunk):
+    async with sem:
+        req = injector.build_request(chunk, task, known_originals)  # includes verify-before-send (§3)
+        return await provider.complete(req)
+
+results = await asyncio.gather(*(run(c) for c in chunks))  # returned in INPUT order, not arrival order
+whole_response = "".join(results)                          # chunk i -> slot i, always
+# -> de-obfuscate(whole_response)
 ```
-obfuscate WHOLE doc                       # tokens already consistent across chunks (A8)
-  → split on no-split-token boundaries    # never break a [TYPE_hex] across a chunk edge
-  → verify-before-send each chunk (§3)
-  → asyncio.gather(concurrent LLM calls)  # hard concurrency; real async, not theater
-  → reassemble responses BY INDEX         # gather preserves order; chunks numbered as a belt
-  → de-obfuscate the reassembled whole
-```
 
-**Why the concurrency is clean:** because we obfuscate the *whole* document before chunking,
-the vault is **read-only during the LLM phase** — concurrent chunk calls physically cannot
-race it. No locking needed on the hot path.
+- **`asyncio.gather` returns results in input order, not completion order** — that's the
+  ordering guarantee. Chunk 3 finishing last still lands in slot 3. (Bulletproof variant if
+  you don't want to lean on gather: tag each job with its index, collect into `{i: result}`,
+  sort by `i`.)
+- **Bounded concurrency** via the semaphore — the Go worker-pool: N jobs, a capped number in
+  flight, so we don't hammer the LLM API into rate-limit errors.
+- **No locking on the hot path** — obfuscate-whole-first makes the vault read-only during the
+  fan-out, so there's nothing to race.
+- Verify-before-send (§3) runs **per chunk**, so no chunk ships unverified.
 
-⚠️ **Honest scope line:** ordered reassembly of chunk *responses* works for **map-style**
-tasks (per-chunk extract/transform). A question needing **global** reasoning over an
-over-context document needs **map-reduce** (summarize chunks → combine), not concatenation —
-a harder scale tier, **designed-not-built**. Single-call covers the demo; concurrent chunking
-covers over-context map-style; map-reduce is the flagged next tier.
+*(A question needing the model to reason across the whole doc at once, when the doc exceeds
+the context window, is a separate map-reduce problem — designed-not-built.)*
 
 ---
 
