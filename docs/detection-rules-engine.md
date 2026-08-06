@@ -47,19 +47,36 @@ Precedence: standard + custom rules merge into one set; the conflict-resolution 
 
 ---
 
-## 3. Guardrails — the engineering of "users supply regex"
+## 3. Guardrails — validate at the door, once
 
-1. 🔴 **ReDoS.** A user regex like `(a+)+$` can catastrophically backtrack and hang the
-   pipeline on a single document — and break the determinism/latency guarantees. Build the
-   matcher on a **linear-time engine (RE2 / Rust `regex` / Go `regexp`)**, or enforce a
-   per-rule match timeout + validate at creation. RE2 is the clean answer — no backtracking,
-   linear, and it *reinforces* the determinism thesis.
+1. 🔴 **ReDoS, caught at intake — the RE2 compile *is* the validator.** A user regex like
+   `(a+)+$` can catastrophically backtrack and hang the pipeline on one document. Rather
+   than pay a runtime check on every scan forever, **validate at rule creation**: try to
+   compile the regex under a **linear-time engine (RE2)**. If it compiles, that *is* the
+   proof it can't backtrack (RE2 rejects backreferences/lookaround — the constructs that
+   make backtracking possible). If it doesn't, **reject at the door with a reason**, never
+   persist it. Acceptance = safety proof; the DB only ever holds provably-safe rules. A
+   cheap runtime match-timeout stays as belt-and-suspenders (§3.3).
 2. 🔒 **Additive-only.** A custom rule may **escalate** (catch more) but must **never
    suppress** a standard rule's catch. One fat-fingered row must not open a leak.
-3. **Fail closed.** Validate regex at creation (reject bad rows there); at runtime a broken
-   rule is **skipped-and-flagged**, never crashes, never silently drops protection.
+3. **Fail closed.** Reject malformed rules at intake; at runtime a broken/timed-out rule is
+   **skipped-and-flagged**, never crashes, never silently drops protection.
 4. **Default `scrub`.** New rules redact unless someone deliberately opts into obfuscate —
    consistent with the overcut dial.
+
+### Tradeoffs of intake-validation + RE2 (logged, because a reviewer will poke)
+
+- **Expressiveness loss.** RE2 has no backreferences / lookaround, so some regexes get
+  rejected. Good trade for a security-critical scrubber (a rule needing a backreference is
+  too clever for this path), but a documented limitation, not a free lunch.
+- **Safety ≠ correctness (the important one).** Intake proves a rule is *safe to run*, not
+  that it *matches what the author intended*. A safe regex can still over-match (destroy
+  clinical data) or under-match (leak). Mitigation: a **dry-run preview at creation** — run
+  the candidate against sample text and show the author exactly what it would scrub before
+  it saves. Moves correctness-checking to the door as far as it can go; the rest is on the
+  author.
+- **Trust-at-runtime.** Intake-validated rules are trusted later → keep the cheap runtime
+  timeout against DB tampering / engine-version drift.
 
 Tradeoff vs. Presidio-style code-registered recognizers: runtime flexibility (ops adds a
 rule with no deploy) bought at the cost of these guardrails that code review gives for free.
