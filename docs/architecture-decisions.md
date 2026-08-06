@@ -348,14 +348,43 @@ for k-anonymity. There is no free lunch. The answer is that this must be an **ex
 auditable policy decision**, surfaced as config — never a silent default buried in a
 generic NER library. The liability lives in the *unexamined* choice.
 
-- Design surface: `preserve_clinical_signal: [ETHNICITY, AGE_BAND, SEX, WEIGHT]` — a
-  visible, reviewable knob. Default preserves-with-documentation; a compliance officer
-  can tighten it. The point is the decision is *made on purpose and logged*, not made
-  by accident by whatever the anonymizer happened to catch.
+### The quasi-identifier knobs — a named policy object, off by default
+
+Preserved clinical quasi-identifiers (ethnicity, age, sex) are **not PHI individually**
+(Safe Harbor permits them) but **can re-identify in combination** — sharpest in a
+**multi-patient table**, where each row hands over a pre-assembled quasi-identifier bundle
+even with names tokenized. We don't ignore it and we don't force it on — we **expose the
+switch**, default off, and **log which way it was set.** The review posture: *"potentially
+PHI in combination; here's the control, here's the conscious default, here's the proof of
+what was active."*
+
+This is **config, not new machinery** — detection and strategy-routing are already
+config-declared, so treating a quasi-identifier as PHI is a routing flip (`preserve →
+tokenize`), zero engine change. Promote the buried default into one first-class object:
+
+```
+ObfuscationPolicy:
+  preserve_ethnicity: true          # flip → tokenize
+  preserve_sex:       true
+  age_mode:           exact | band | token      # default exact (<90), band/token = stricter
+  multi_record_strict: false        # multi-patient table → escalate QI treatment
+  policy_version:     "v1"
+```
+
+- **Default permissive** (preserve — clinical utility, Safe-Harbor-permitted); **strict is
+  one flag away.**
+- **One named, versioned object**, applied at the routing layer — not booleans sprinkled
+  through code (that's how you lose track of what's on).
+- 🔒 **Audit logs `policy_version` per event.** The compliance officer's real question is
+  not "can you turn it on" but "prove what was active for *this* document 30 days ago."
+  Logging the policy id answers it — and it's not PHI, so it's safe to log (token-only rule
+  intact).
+- Only `multi_record_strict` carries mild new logic (detect multi-patient table → escalate);
+  everything else is pure config.
 
 🎯 This reframes the whole task from "scrub PII" to "**maximize privacy subject to
-preserving decision-relevant signal**" — and it's the clearest evidence that a human,
-not an LLM, designed this system.
+preserving decision-relevant signal, under an explicit auditable policy**" — the clearest
+evidence that a human, not an LLM, designed this system.
 
 ---
 
