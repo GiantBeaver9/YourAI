@@ -71,12 +71,32 @@ Precedence: standard + custom rules merge into one set; the conflict-resolution 
   too clever for this path), but a documented limitation, not a free lunch.
 - **Safety ≠ correctness (the important one).** Intake proves a rule is *safe to run*, not
   that it *matches what the author intended*. A safe regex can still over-match (destroy
-  clinical data) or under-match (leak). Mitigation: a **dry-run preview at creation** — run
-  the candidate against sample text and show the author exactly what it would scrub before
-  it saves. Moves correctness-checking to the door as far as it can go; the rest is on the
-  author.
+  clinical data) or under-match (leak). Mitigation: the **example/preview panel** at
+  creation (§3a).
 - **Trust-at-runtime.** Intake-validated rules are trusted later → keep the cheap runtime
   timeout against DB tampering / engine-version drift.
+
+### 3a. The example / preview panel (correctness at the door)
+
+When an author enters a regex, show — before it saves — what it would do. This is the
+quick-review guardrail against the over-match half of §3's safety≠correctness, which is the
+failure that causes *clinical harm* (eating a lab value), not just a leak.
+
+- **Generated examples (regex → strings).** A generator (`exrex` / `Xeger`) produces a
+  handful of strings the pattern matches: "catches things like `123-45-6789`,
+  `000-00-0000`." Over-breadth jumps out — type `\d+` and it returns `5`, `0`, `12`, and the
+  author sees it would eat dosages. (RE2-restricted → generation is well-defined, no
+  backreferences to confound it.)
+- **In-context matches (text → highlights).** Run the candidate over a bundled sample doc
+  (or a pasted snippet) and highlight exactly what it would scrub, in situ.
+- **Breadth warning.** If the pattern matches the empty string, matches 1–2-char strings, or
+  is unbounded → soft warn "⚠️ broad rule, likely to over-scrub." Turns the panel from a
+  confirmation box into a real guardrail.
+
+Intake flow: type regex → RE2 compiles (safe / rejected-with-reason) → panel shows generated
+examples + in-context matches + breadth warning → author confirms → saved.
+
+---
 
 Tradeoff vs. Presidio-style code-registered recognizers: runtime flexibility (ops adds a
 rule with no deploy) bought at the cost of these guardrails that code review gives for free.
