@@ -171,6 +171,50 @@ Defense in depth: split custody of the token map (vault DB) from the key (KMS).
 
 ---
 
+## ADR-2b: Token format — per-document keyed, human-readable, leak-tracing
+
+The token is not just an opaque placeholder — designed well it does three jobs at once.
+Derivation unifies session isolation, per-document non-linkability, and forensic tracing
+under one primitive:
+
+```
+k_doc  = HKDF(K_s, doc_id)                       # per-document subkey from session key
+slice  = HMAC(k_doc, normalize(entity_value))    # one-way, deterministic-in-doc
+token  = f"patient_{slice[:6]}"                   # human-readable presentation
+```
+
+Properties, all from one construction:
+- **Session isolation** (PRD requirement): `K_s` scopes everything to a session; Session
+  B can't derive Session A's tokens.
+- **Per-document namespace / no cross-document correlation:** `doc_id` in the derivation
+  means the *same real patient* gets a *different* slice in a different document. A
+  clinician never sees one patient's snippet repeated across their whole caseload —
+  they see it once, in-document. Defeats cross-document linkage. 🔒
+- **Deterministic within a document:** same value → same slice on every mention (natural
+  coreference collapse *within the doc*, where it actually matters — ADR/earlier note
+  that cross-doc identity resolution is explicitly NOT our job).
+- **Irreversibility:** HMAC one-way; slice reveals nothing about the value.
+- **Leak-tracing canary:** the audit vault stores `doc_id ↔ k_doc`. A token found in the
+  wild (a log, a provider trace, a leaked file) traces back to its source document. The
+  token doubles as a **watermark**. Note: the trace key is `(doc_id, token)`, never
+  `token` alone — a bare slice can repeat across documents by design.
+
+### Two real constraints this creates
+
+1. **Human-readable prefix vs de-obf reliability.** `patient_02938d` reads more naturally
+   to the LLM than `[PHI_NAME_02938d]` → better fluency and coreference. But `patient` is
+   a common English word, and de-obfuscation must detect tokens **unambiguously** (a
+   false match restores a wrong value → 🟠). Resolution options: a reserved sentinel
+   character in the slice delimiter, a per-type readable prefix drawn from a reserved
+   namespace, or a strict `prefix_[0-9a-f]{6}` grammar the model is instructed to
+   preserve verbatim. **We buy fluency only if we can keep the grammar unambiguous.**
+2. **Slice length vs collision** (register A4): 6 hex = 24 bits is ample *within a
+   document* (few dozen entities); collision is checked against the per-doc vault and the
+   slice extended on the rare clash. Cross-document collisions are expected and harmless
+   (different namespaces).
+
+---
+
 ## ADR-3: Obfuscation strategies — tokenization vs pseudonymization
 
 Shared `ObfuscationStrategy` ABC; both selectable by config; zero harness changes to

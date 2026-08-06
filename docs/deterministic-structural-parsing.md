@@ -131,6 +131,35 @@ story than "add a Presidio recognizer" because it's *deterministic* and *auditab
 
 ---
 
+## 2a. The three-way outcome — fail closed to human review
+
+Every document (and every region within it) resolves to one of **three** outcomes, not
+two. This is a deliberate security posture, not a gap:
+
+1. **AUTO-PROCESS** — structure parsed deterministically, high confidence → tokenize.
+2. **REDACT** — parseable but a specific value is low-confidence / ambiguous boundary →
+   block it (overcut), continue.
+3. **REJECT → HUMAN** — the document's *structure* can't be deterministically parsed
+   (multi-column reading flow P8, unrecoverable layout, OCR-only) → refuse to
+   auto-process; route to human blotting.
+
+> **Fail closed.** We would rather reject a document than guess at PHI boundaries and
+> leak. "Some documents cannot be safely automated" is the realist, correct answer —
+> not a flaw. Trying to solve impossible layout riddles is wasted effort and a leak risk.
+
+This needs a cheap **parseability classifier** up front: detect multi-column text bands
+(x-coordinate clustering), detect absence of a text layer (scanned), detect structural
+chaos → REJECT before parsing. Detecting-to-reject ≪ parsing, so it's affordable.
+
+**Open:** reject granularity — whole-document vs per-page/region quarantine (process the
+clean 48 pages, human-review the 2 messy ones). Per-region = better utility, more
+plumbing; whole-doc = simpler, safer default.
+
+⚠️ Overcut philosophy justification: a missing word or two is recoverable — a human can
+blot the rest, and utility degrades gracefully. A leaked PHI value is **not**
+recoverable. So every ambiguous dial turns toward overcut / reject, never toward
+pass-through.
+
 ## 3. Parsing-specific failure modes (each → a test)
 
 Distinct from the pipeline register — these are about **grabbing the wrong span**,
@@ -141,10 +170,18 @@ loss / a real sentence destroyed.
   no-delimiter case (`Name        John Smith`) needs column-position inference; you
   cannot split label/value by a delimiter that isn't there. *test: all delimiter styles.*
 - **P2 Empty field vs value-on-next-line** 🔵🔴 — `Name:` followed by a blank vs `Name:`
-  followed by `John Smith` on the next line. If we always take NEXT_LINE we delete
-  innocent content on empty fields; if we never do, we leak the next-line case. **No
-  clean rule** — heuristic: NEXT_LINE only if same-line value is empty *and* the next
-  line is non-blank *and* doesn't itself start with a label. Document the residual risk.
+  followed by `John Smith` on the next line. **Resolution:** check the label line; if the
+  same-line value is empty, check the next line; take it only if non-blank and not itself
+  a label. Bias toward **grabbing** (overcut > undercut). Residual risk documented; the
+  reject/human path (§3a) catches the genuinely ambiguous cases.
+- **P2b Word-count classifier for name fields** 🔵 — the value span is *classified by word
+  count*, not blindly cut. A **name-only** line is ~2–4 words → treat the whole span as
+  name, redact it (aggressive, overcut-safe). A line with **more** words carries other
+  content → do NOT blind-cut; hand it to finer detection so the name is removed but
+  **clinical signal on the same line survives** (`Attending: John Smith, 45yo male` must
+  keep `45yo male` — ADR-3). Expected count is **per-label**: `First Name:` → 1,
+  `Patient Name:` → 2–4. This reconciles overcut-names with preserve-clinical-signal.
+  *test: mixed name+age line keeps age; pure name line fully redacted.*
 - **P3 Boundary stops at next label, not EOL** (1b) 🔴 — *test: multi-field line masks
   each value independently.*
 - **P4 Label-shaped prose** 🔵 — "the date of birth requirement applies" is not a DOB
@@ -162,9 +199,16 @@ loss / a real sentence destroyed.
   *test: 3-line address bounded by the next label.*
 - **P8 Reading order / column interleave** 🔴 — THE deterministic-parser killer. A
   two-column legal document extracted by a naive PDF reader interleaves left and right
-  columns into garbage adjacency, so "after X" points at the wrong text. Breaks the core
-  assumption. → must reconstruct lines by **y-coordinate** and columns by **x-clustering**
-  before any anchor→direction reasoning. *test: two-column PDF preserves reading order.*
+  columns into garbage adjacency, so "after X" points at the wrong text. **Resolution:
+  we do NOT try to solve multi-column reading order — we DETECT and REJECT it** (§3a).
+  Trying to reconstruct arbitrary multi-flow layouts is an impossible-riddle time sink;
+  fail closed to human review instead. We still need cheap layout analysis to *detect*
+  multiple x-coordinate text bands so we can reject — detecting is far cheaper than
+  parsing. *test: two-column PDF is rejected, not silently mis-parsed.*
+  ⚠️ Distinct from **tables** (P6): a table has a header row typing columns and
+  row-aligned cells → we parse it via x-coordinates. A two-column *page* has two
+  independent reading flows → we reject it. The detector that tells these apart is the
+  real work of the reject path.
 - **P9 Line-ending / soft-wrap normalization** — CR vs LF vs CRLF vs form-feed; a hard
   field break vs a display soft-wrap. Normalize; distinguish. *test: mixed line endings.*
 - **P10 Repeated header/footer** (1g) — redact all occurrences, one token. *test.*
