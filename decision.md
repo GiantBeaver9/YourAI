@@ -14,7 +14,7 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 5. **Finality.** The read is recorded when the `/inbox` call returns `200`. That 200 is the delivery event.
 
-6. **Out of scope: the after-200 window.** If we return 200 and the consumer dies immediately after, that is not the API's problem. At-most-once on that razor is accepted. Not designing for it.
+6. **Accepted razor: the transport-drop window (scoped, reconciled with #13).** The one loss case on the pull inbox is a response *sent but never received* — mark-read commits, the consumer never gets the body. Accepted for the demo; this is **not** a general at-most-once claim (the pull is at-least-once at the server boundary, #13). The prod closer is the explicit `ack`/`delete` endpoint. Not designing for it in v1.
 
 7. **Endpoints.** `/inbox` (undelivered events) and `/last?num=x` (last x items).
 
@@ -34,16 +34,18 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
     They're semantically distinct but coherent within the one application. The **event-stream framing (vs ST6's pure list)** is the *second* of the two defining differences from ST6 — the anti-join inbox (decision #3) is the first.
 
 13. **Delivery guarantees are per-surface — two mechanisms, not one.**
-    - **Pull `/inbox`:** at-least-once via the anti-join. Duplicates possible under concurrent polls; the consumer is idempotent on event id. The anti-join is a stateless unseen-set query, not a dedup — dupes are the accepted currency, not a bug.
-    - **Push subscription (stretch):** at-least-once via retry-with-backoff until a downstream `200` (stretch #2/#3).
+    - **Pull `/inbox`:** at-least-once **at the server boundary**, **lock-free by design** (#17) — concurrent reads may return the same event; we accept the dupe rather than lock (consumer idempotent on event id), which *is* the at-least-once philosophy. Read is marked on the response (mark-on-read, no deferred-ack machinery). The one residual gap — response *sent but not received* (transport drop / consumer OOM on receipt) — is the accepted razor (#6). We do **not** claim strict *end-to-end* at-least-once on the pull; the explicit `ack`/`delete` endpoint is the documented prod closer. **Compliance:** delete-on-consume already satisfies the brief's "acknowledgment or deletion flow" — implicit ack chosen deliberately for latency/simplicity.
+    - **Push subscription (stretch):** at-least-once — POST to the consumer URL, **await their `200`**, retry-with-backoff until confirmed. Their `200` = delivered; their internal processing failures are theirs, not ours.
 
-    Separate paths, separate delivery stories, by design — do not conflate them. (The post-`200` client-crash razor on `/inbox` stays the accepted negligible gap per decision #6; whether an explicit ack should close it is the open ack-flow question.)
+    Separate paths, separate delivery stories, by design — do not conflate them. The anti-join is a stateless unseen-set query, not a dedup — dupes are the accepted currency, not a bug.
 
 14. **New-subscriber floor (`created_at` watermark).** A customer's `/inbox` anti-join is filtered `event.created_at > subscription.created_at` — a new subscriber starts from their subscription point, not the beginning of the stream. Kills the cold-start "bombarded with all history" blowup and its marker-write storm. Pivot on *subscription* created_at (not account created_at), so subscribing to a new event_type later starts from that subscription. Cold-start floor only — steady-state growth of the delivered set is separate (open holes).
 
 15. **Scaling = partition by customer (elaborates #8).** Shard across multiple DBs keyed on `customer_id`, with a routing API layer over the shards. The per-customer anti-join never crosses a shard, so it composes cleanly. This scales the **customer-count** axis. It does **not** bound a single long-lived customer's history growth — that is a separate, *temporal* axis handled by retention (#16). Don't conflate the two.
 
 16. **Steady-state read bound = retention / archival window.** Delivered markers and cold events are archived off the hot DB on a cadence (daily/weekly/monthly — an ops tuning knob, out of scope to pin). The `/inbox` anti-join then scans only the hot window; with the `created_at` floor (#14) and sharding (#15), steady-state read cost is bounded. **State plainly:** archiving *undelivered* events is an **event-age TTL** — `/inbox` has a max event age and events older than retention `R` expire from the inbox. That is an accepted, *stated* expiry, not a silent drop.
+
+17. **Lock-free hot path — latency over strict consistency.** We reject stop-the-world / row-locking on the inbox path; sequential locks destroy latency and responsiveness under load. Concurrent `/inbox` calls are **not** serialized — we accept that two readers may get the same event and rely on idempotent consumers (event id). No lock is needed to make concurrent polls "correct" because returning an event twice is *acceptable* (= at-least-once, #13), not a bug. This is the explicit answer to "what isolation/locking serializes concurrent `/inbox` calls?" — **none, by design.**
 
 ## Stretch options (brief's advanced list — "explore 1 or 2")
 
