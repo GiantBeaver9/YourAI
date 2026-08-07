@@ -20,8 +20,9 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 8. **Multi-customer.** Infinite customers supported. Partition later (by customer). The DB-backed design keeps partitioning open as a future move.
 
+9. **Delivered set is per-customer.** Each customer has its own unread set. The anti-join is keyed on `customer_id` — an event is delivered/read per customer, not globally. That's the whole reason there's a customer key alongside the event ID.
+
 ## Open (not yet decided — do not invent)
 
-- **Delivered set scope:** global (first customer to read burns the event for everyone) vs per-customer (each customer has its own unread set; anti-join keyed on `customer_id`).
 - **`/last` and delivery state:** does `/last` record a read, or is it a read-only peek?
 - **Contrast vs ST6:** what specifically the "finality" change is relative to the prior project.
