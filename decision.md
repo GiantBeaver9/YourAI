@@ -53,6 +53,14 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 18. **Delivered set is shared per customer, path-agnostic; push-vs-pull is a per-customer mode (resolved, attack #7).** One `(customer, event)` delivered fact — not per-path ledgers. Push-vs-pull is a **per-customer mode** (a customer operates as a poller *or* a subscriber, not both at once), so "delivered to C" is one fact served by whichever mode C is in. The both-modes-at-once case is not a normal operating state; if it ever occurred it degrades to the same accepted dupe (#13/#17) — no new failure mode. Per-path delivery tracking (separate send/read ledgers) is a **deferred, extensible feature** — a secondary table checked later, small lift, not built without a driving use case (YAGNI).
 
+19. **Operational posture (resolved, attack #9).**
+    - **Failing endpoint = circuit breaker, not per-event DLQ (push).** Retry on capped backoff up to ~2h (a longer window than ST6's 5-attempt default, stretch #2), then **temporarily disable the endpoint** and let events **queue as undelivered** until it recovers / is re-enabled (health probe or customer action). The undelivered queue + disabled endpoint *is* the DLQ. Honest boundary: the queue is bounded by retention `R` (#16), so an outage longer than `R` expires those events (the stated TTL) — say it, don't hide it.
+    - **No head-of-line blocking on the pull core.** `/inbox` is a set/query, not a FIFO — an unprocessable event stays undelivered for that one customer and blocks no one; it TTLs out. DLQ/head-of-line is a push-only concern.
+    - **Payload size.** No *tuned* cap (defer until real event size/shape is known — an array of ~200 events is trivial). A loose **sanity ceiling** + `413` as an abuse/accident guardrail is [pending decision] — a safety limit, not a product limit.
+    - **Rate limit / backpressure (`429`).** Documented as prod, not built in v1.
+    - **Crash recovery.** Pull core is DB-durable and stateless → restart is a non-event; push re-enqueues pending events on startup (ST6 `LoadPendingEvents` pattern).
+    - These were **considered and scoped**, not missed (answers the "Open: None" signal).
+
 ## Stretch options (brief's advanced list — "explore 1 or 2")
 
 1. **Subscriptions & filtering — approach per ST6.** Customer-controlled one-hot `(customer, event_type) → URL` subscription matrix behind a read-through cache (`RWMutex`; a read colliding with a refresh briefly pauses). Filtering is late / delivery-time, so a subscription change takes effect on the next config poll with no redeploy. (Ref: ST6 — `customer-service/internal/cache`, `event-handler/internal/deliver`.)
