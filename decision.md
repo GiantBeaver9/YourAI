@@ -18,7 +18,7 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 5. **Finality.** The read is recorded when the `/inbox` call returns `200`. That 200 is the delivery event.
 
-6. **Accepted razor: the transport-drop window (scoped, reconciled with #13).** The one loss case on the pull inbox is a response *sent but never received* — mark-read commits, the consumer never gets the body. Accepted for the demo; this is **not** a general at-most-once claim (the pull is at-least-once at the server boundary, #13). The prod closer is the explicit `ack`/`delete` endpoint. Not designing for it in v1.
+6. **Accepted razor: the transport-drop window (scoped, reconciled with #13).** The one loss case on the pull inbox is a response *sent but never received* — mark-read commits, the consumer never gets the body. Accepted for the demo; this is **not** a general at-most-once claim (the pull is at-least-once at the server boundary, #13). **Recoverable in v1:** a consumer that loses an `/inbox` response can re-read the batch via `/last` (delivery-neutral peek, #12) within the last-N window — so the razor is *recoverable*, not silent loss. The explicit `ack`/`delete` endpoint is the stricter prod closer. Not designing further for it in v1.
 
 7. **Endpoints.** `/inbox` (undelivered events) and `/last?num=x` (last x items).
 
@@ -33,7 +33,7 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 12. **Three surfaces — logically separate, jointly coherent.**
     - `POST /events` (ingest): an append-only **event stream**, not a pure mutable list.
     - `/inbox`: **pure new** — the per-customer anti-join over undelivered events; records the read on the `200`.
-    - `/last?num=x`: **pure read** — a read-only peek at the last x items; does *not* record a read or touch delivery state.
+    - `/last?num=x`: **pure read / recovery peek** — read-only, does *not* record a read or touch delivery state. Purpose: let a customer see the last x events **regardless of delivered status** — a circumvention/recovery path for retrieval failures (e.g. they pulled `/inbox` and lost or immediately closed the response). *Not* a delivery channel; it's the safety net that makes the #6 transport-drop razor **recoverable** (within the last-N window; consumer dedupes on event id), not silent loss. Showing already-consumed events is the feature, not a bug (resolves attack #8).
 
     They're semantically distinct but coherent within the one application. The **event-stream framing (vs ST6's pure list)** is the *second* of the two defining differences from ST6 — the anti-join inbox (decision #3) is the first.
 
