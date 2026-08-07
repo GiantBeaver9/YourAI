@@ -8,12 +8,14 @@ COPY tests ./tests
 COPY fixtures ./fixtures
 COPY demo.py ./
 
-RUN pip install --no-cache-dir -e ".[dev]"
+# Install with the Presidio detection substrate (NER for free-text names) + doc extractors + tests.
+RUN pip install --no-cache-dir -e ".[dev,presidio,docs]"
 
-# Presidio is the intended detection substrate but a heavy install (spaCy model). The pipeline
-# runs on the native rule-engine fallback without it. To enable the full Presidio NER substrate,
-# uncomment:
-# RUN pip install --no-cache-dir ".[presidio,docs]" && python -m spacy download en_core_web_lg
+# Presidio's spaCy NER model. lg = best accuracy (~560MB, default); pass
+# --build-arg SPACY_MODEL=en_core_web_sm for a much smaller/faster image with lower recall.
+ARG SPACY_MODEL=en_core_web_lg
+RUN python -m spacy download ${SPACY_MODEL}
+ENV SCP_SPACY_MODEL=${SPACY_MODEL}
 
 # Default: serve the API (Railway sets $PORT). Run the demo with:
 #   docker-compose run --rm scp python demo.py

@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import os
+
+# The suite validates the DETERMINISTIC guarantee layer; force the native detector so results
+# don't depend on whether Presidio + a spaCy model happen to be installed (probabilistic recall
+# is exercised separately). Deploys leave this unset to use the Presidio substrate.
+os.environ["SCP_DISABLE_PRESIDIO"] = "1"
+
 import pytest
 from faker import Faker
 

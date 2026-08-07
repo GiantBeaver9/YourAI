@@ -8,6 +8,8 @@ factory falls back to the native rule engine so nothing breaks.
 
 from __future__ import annotations
 
+import os
+
 from ..config import ObfuscationPolicy
 from ..entities import DetectedEntity, EntityType
 from .clustering import assign_clusters
@@ -15,10 +17,16 @@ from .rule_engine import RuleEngineDetector
 
 try:  # guarded — Presidio + spaCy model is a heavy, optional install
     from presidio_analyzer import AnalyzerEngine
+    from presidio_analyzer.nlp_engine import NlpEngineProvider
 
     _HAS_PRESIDIO = True
 except Exception:  # pragma: no cover - import guard
     _HAS_PRESIDIO = False
+
+def _spacy_model() -> str:
+    """spaCy model Presidio's NER runs on. `en_core_web_lg` = best accuracy (~560MB);
+    `en_core_web_sm` = tiny/fast builds. Override with SCP_SPACY_MODEL (read at call time)."""
+    return os.environ.get("SCP_SPACY_MODEL", "en_core_web_lg")
 
 # Presidio entity label -> our EntityType
 _PRESIDIO_MAP = {
@@ -37,9 +45,21 @@ _PRESIDIO_MAP = {
 }
 
 
+def _build_analyzer(model: str) -> "AnalyzerEngine":
+    """Build Presidio's analyzer on a specific spaCy model (so `sm` works, not just the
+    default `lg`)."""
+    provider = NlpEngineProvider(
+        nlp_configuration={
+            "nlp_engine_name": "spacy",
+            "models": [{"lang_code": "en", "model_name": model}],
+        }
+    )
+    return AnalyzerEngine(nlp_engine=provider.create_engine(), supported_languages=["en"])
+
+
 class PresidioDetector:
-    def __init__(self) -> None:
-        self._analyzer = AnalyzerEngine()
+    def __init__(self, model: str | None = None) -> None:
+        self._analyzer = _build_analyzer(model or _spacy_model())
         self._domain = RuleEngineDetector()  # our domain passes ride alongside Presidio
 
     async def detect(
@@ -55,15 +75,33 @@ class PresidioDetector:
         ents += self._domain._magnitude(text)
         ents += self._domain._clinical(text)
         ents += self._domain._label_rules(text)
+        # deterministic coreference: propagate every mention of a name Presidio/labels found
+        ents += self._domain._propagate_names(text, ents)
         assign_clusters(ents)
         return ents
 
 
+def _model_installed(model: str) -> bool:
+    """Fast check: is the spaCy model actually installed? Avoids a slow failed load attempt
+    (or a download) when it isn't, so absence falls back to native instantly."""
+    try:
+        import spacy.util
+
+        return spacy.util.is_package(model)
+    except Exception:  # pragma: no cover
+        return False
+
+
 def get_detector(prefer_presidio: bool = True):
-    """Presidio substrate when available and initializable; native rule engine otherwise."""
-    if prefer_presidio and _HAS_PRESIDIO:
+    """Presidio substrate when it's installed AND its spaCy model is present; native rule engine
+    otherwise (instant fallback — no hang on a missing model). Set SCP_DISABLE_PRESIDIO to force
+    the deterministic native engine (used by the test suite)."""
+    if os.environ.get("SCP_DISABLE_PRESIDIO"):
+        return RuleEngineDetector()
+    model = _spacy_model()
+    if prefer_presidio and _HAS_PRESIDIO and _model_installed(model):
         try:
-            return PresidioDetector()
-        except Exception:  # pragma: no cover - missing spaCy model, etc.
+            return PresidioDetector(model)
+        except Exception:  # pragma: no cover - initialization edge cases
             pass
     return RuleEngineDetector()
