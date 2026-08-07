@@ -41,7 +41,9 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 14. **New-subscriber floor (`created_at` watermark).** A customer's `/inbox` anti-join is filtered `event.created_at > subscription.created_at` — a new subscriber starts from their subscription point, not the beginning of the stream. Kills the cold-start "bombarded with all history" blowup and its marker-write storm. Pivot on *subscription* created_at (not account created_at), so subscribing to a new event_type later starts from that subscription. Cold-start floor only — steady-state growth of the delivered set is separate (open holes).
 
-15. **Scaling = partition by customer (elaborates #8).** Shard across multiple DBs keyed on `customer_id`, with a routing API layer over the shards. The per-customer anti-join never crosses a shard, so it composes cleanly. This scales the **customer-count** axis. It does **not** bound a single long-lived customer's history growth — that is a separate, *temporal* axis handled by the watermark (open). Don't conflate the two.
+15. **Scaling = partition by customer (elaborates #8).** Shard across multiple DBs keyed on `customer_id`, with a routing API layer over the shards. The per-customer anti-join never crosses a shard, so it composes cleanly. This scales the **customer-count** axis. It does **not** bound a single long-lived customer's history growth — that is a separate, *temporal* axis handled by retention (#16). Don't conflate the two.
+
+16. **Steady-state read bound = retention / archival window.** Delivered markers and cold events are archived off the hot DB on a cadence (daily/weekly/monthly — an ops tuning knob, out of scope to pin). The `/inbox` anti-join then scans only the hot window; with the `created_at` floor (#14) and sharding (#15), steady-state read cost is bounded. **State plainly:** archiving *undelivered* events is an **event-age TTL** — `/inbox` has a max event age and events older than retention `R` expire from the inbox. That is an accepted, *stated* expiry, not a silent drop.
 
 ## Stretch options (brief's advanced list — "explore 1 or 2")
 
@@ -61,5 +63,5 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 ## Open (not yet decided — do not invent)
 
-- **Steady-state read bounding (attack #5):** the `created_at` floor (#14) caps cold-start and partitioning (#15) caps customer-count, but a single long-lived customer's delivered set still grows and each poll anti-joins over it. Needs a watermark/compaction story — complicated by the at-least-once out-of-order gaps that make a contiguous high-water mark hard. Being worked.
+- **Caller→customer auth binding (attack #3):** identity is passed as a request param (#10), so nothing binds the caller to the customer → cross-tenant read + inbox-clear on the flagship isolation feature (#9). Deferring token *sophistication* (OAuth, rotation, TLS) is fine for a demo; deferring *any* binding lets the demo disprove its own thesis. Pending pick: (a) minimal per-customer key derived server-side (~30 lines, makes the demo actually show isolation), or (b) explicit stub + honest caveat downgrading the #9 claim. Being worked.
 - **Contrast vs ST6:** what specifically the "finality" change is relative to the prior project.
