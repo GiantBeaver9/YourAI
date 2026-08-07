@@ -8,7 +8,7 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 2. **Ingress idempotency.** Enforced by a DB constraint on the way in. Idempotency is only a concern on ingest; not on delivery.
 
-3. **Delivery = against the grain (anti-join).** `/inbox` returns events that have not yet been delivered — a `LEFT JOIN` against the delivered/read set, returning the rows with no match. We do **not** mark-then-serve. We serve, then record the read. This pull anti-join inbox is **one of the two defining features** separating this project from ST6 (ST6 is push-only: a `status` column and a `LEFT JOIN LATERAL` attempt-rollup, no per-recipient read concept).
+3. **Delivery = against the grain (anti-join).** `/inbox` returns events not yet delivered to the customer — a `LEFT JOIN` against the delivered/read set, returning the rows with no match. We serve, then record the read (not mark-then-serve) — chosen to avoid locking/serializing the hot poll path, **not** for write economy. The anti-join is a **stateless "what hasn't this customer seen" query** (no per-consumer offset, no ack round-trip), **not** a dedup mechanism. `/inbox` is therefore **at-least-once**: under concurrent polls the same event may return twice, and consumers dedupe on event id (the standard webhook contract). This pull anti-join inbox is **one of the two defining features** separating this project from ST6 (ST6 is push-only: a `status` column and a `LEFT JOIN LATERAL` attempt-rollup, no per-recipient read concept).
 
 4. **Why against the grain.** Marking items as read first means too many DB reads/writes (write amplification). Read-heavy anti-join is the deliberate choice to keep the write load down. This is the core thesis of the design.
 
@@ -32,6 +32,12 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
     - `/last?num=x`: **pure read** — a read-only peek at the last x items; does *not* record a read or touch delivery state.
 
     They're semantically distinct but coherent within the one application. The **event-stream framing (vs ST6's pure list)** is the *second* of the two defining differences from ST6 — the anti-join inbox (decision #3) is the first.
+
+13. **Delivery guarantees are per-surface — two mechanisms, not one.**
+    - **Pull `/inbox`:** at-least-once via the anti-join. Duplicates possible under concurrent polls; the consumer is idempotent on event id. The anti-join is a stateless unseen-set query, not a dedup — dupes are the accepted currency, not a bug.
+    - **Push subscription (stretch):** at-least-once via retry-with-backoff until a downstream `200` (stretch #2/#3).
+
+    Separate paths, separate delivery stories, by design — do not conflate them. (The post-`200` client-crash razor on `/inbox` stays the accepted negligible gap per decision #6; whether an explicit ack should close it is the open ack-flow question.)
 
 ## Stretch options (brief's advanced list — "explore 1 or 2")
 
