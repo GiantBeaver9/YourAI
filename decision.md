@@ -22,6 +22,8 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 9. **Delivered set is per-customer.** Each customer has its own unread set. The anti-join is keyed on `customer_id` — an event is delivered/read per customer, not globally. That's the whole reason there's a customer key alongside the event ID.
 
+10. **Customer identification.** `POST`/`GET` on inbox requires a `customer_id` or password to identify the customer. **Preferred for production:** an auth token that identifies the customer instead. That's out of scope now — recorded as the production direction, not built in v1.
+
 ## Open (not yet decided — do not invent)
 
 - **`/last` and delivery state:** does `/last` record a read, or is it a read-only peek?
