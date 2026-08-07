@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 secure_context_pipeline/__init__.py
+secure_context_pipeline/api.py
 secure_context_pipeline/config.py
 secure_context_pipeline/entities.py
 secure_context_pipeline/grammar.py
@@ -40,6 +41,7 @@ secure_context_pipeline/vault/__init__.py
 secure_context_pipeline/vault/keyring.py
 secure_context_pipeline/vault/session.py
 secure_context_pipeline/vault/vault.py
+tests/test_api.py
 tests/test_engine.py
 tests/test_leakage.py
 tests/test_pipeline.py

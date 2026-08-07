@@ -10,6 +10,8 @@ requires-python = ">=3.10"
 dependencies = [
     "cryptography>=42",
     "faker>=25",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
 ]
 
 [project.optional-dependencies]
@@ -18,7 +20,7 @@ dependencies = [
 presidio = ["presidio-analyzer>=2.2", "spacy>=3.7"]
 llm = ["anthropic>=0.40"]
 docs = ["pypdf>=4", "python-docx>=1"]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "hypothesis>=6"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "hypothesis>=6", "httpx>=0.27"]
 
 [tool.setuptools.packages.find]
 include = ["secure_context_pipeline*"]
