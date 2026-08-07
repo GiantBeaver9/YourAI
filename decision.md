@@ -26,6 +26,13 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 11. **Two directions, two writes — don't conflate.** (a) Ingest `POST`: the event is persisted durably *immediately*, before any delivery (decision #1). (b) Endpoint push delivery (stretch): retry with backoff and persist the *delivered marker* only on a `200`. The event is always written first; only the delivered/read marker is retry-gated. ("Retry before writing to the DB" refers to the marker write, not the event write.)
 
+12. **Three surfaces — logically separate, jointly coherent.**
+    - `POST /events` (ingest): an append-only **event stream**, not a pure mutable list.
+    - `/inbox`: **pure new** — the per-customer anti-join over undelivered events; records the read on the `200`.
+    - `/last?num=x`: **pure read** — a read-only peek at the last x items; does *not* record a read or touch delivery state.
+
+    They're semantically distinct but coherent within the one application. The **event-stream framing (vs ST6's pure list)** is the *second* of the two defining differences from ST6 — the anti-join inbox (decision #3) is the first.
+
 ## Stretch options (brief's advanced list — "explore 1 or 2")
 
 1. **Subscriptions & filtering — approach per ST6.** Customer-controlled one-hot `(customer, event_type) → URL` subscription matrix behind a read-through cache (`RWMutex`; a read colliding with a refresh briefly pauses). Filtering is late / delivery-time, so a subscription change takes effect on the next config poll with no redeploy. (Ref: ST6 — `customer-service/internal/cache`, `event-handler/internal/deliver`.)
@@ -44,6 +51,5 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 ## Open (not yet decided — do not invent)
 
-- **Second defining feature vs ST6:** the anti-join pull inbox (decision #3) is stated as "one of two." Name the second.
-- **`/last` and delivery state:** does `/last` record a read, or is it a read-only peek?
+_None open._
 - **Contrast vs ST6:** what specifically the "finality" change is relative to the prior project.
