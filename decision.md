@@ -22,7 +22,7 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 9. **Delivered set is per-customer.** Each customer has its own unread set. The anti-join is keyed on `customer_id` — an event is delivered/read per customer, not globally. That's the whole reason there's a customer key alongside the event ID.
 
-10. **Customer identification.** `POST`/`GET` on inbox requires a `customer_id` or password to identify the customer. **Preferred for production:** an auth token that identifies the customer instead. That's out of scope now — recorded as the production direction, not built in v1.
+10. **Customer identification = per-customer API key (resolved, attack #3).** The caller sends a per-customer key/secret; the server **derives `customer_id` from the key** (indexed middleware lookup) and ignores any `customer_id` in the request — no id to spoof, cross-tenant reads structurally impossible, and the demo actually *shows* isolation (#9). **Kept frictionless:** seed 2–3 demo customers with fixed known keys at startup + ship an example client / curl snippets / Makefile targets (`make inbox-a`) that carry the key, so demoing is one command, not header-typing — and that example client is itself a graded DX deliverable per the brief. Token *sophistication* (OAuth, rotation, TLS, rate-limit) stays documented as prod direction, not built in v1.
 
 11. **Two directions, two writes — don't conflate.** (a) Ingest `POST`: the event is persisted durably *immediately*, before any delivery (decision #1). (b) Endpoint push delivery (stretch): retry with backoff and persist the *delivered marker* only on a `200`. The event is always written first; only the delivered/read marker is retry-gated. ("Retry before writing to the DB" refers to the marker write, not the event write.)
 
@@ -63,5 +63,5 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 ## Open (not yet decided — do not invent)
 
-- **Caller→customer auth binding (attack #3):** identity is passed as a request param (#10), so nothing binds the caller to the customer → cross-tenant read + inbox-clear on the flagship isolation feature (#9). Deferring token *sophistication* (OAuth, rotation, TLS) is fine for a demo; deferring *any* binding lets the demo disprove its own thesis. Pending pick: (a) minimal per-customer key derived server-side (~30 lines, makes the demo actually show isolation), or (b) explicit stub + honest caveat downgrading the #9 claim. Being worked.
+_None open._
 - **Contrast vs ST6:** what specifically the "finality" change is relative to the prior project.
