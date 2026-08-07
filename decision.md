@@ -10,7 +10,7 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 3. **Delivery = against the grain (anti-join).** `/inbox` returns events not yet delivered to the customer — a `LEFT JOIN` against the delivered/read set, returning the rows with no match. We serve, then record the read (not mark-then-serve) — chosen to avoid locking/serializing the hot poll path, **not** for write economy. The anti-join is a **stateless "what hasn't this customer seen" query** (no per-consumer offset, no ack round-trip), **not** a dedup mechanism. `/inbox` is therefore **at-least-once**: under concurrent polls the same event may return twice, and consumers dedupe on event id (the standard webhook contract). This pull anti-join inbox is **one of the two defining features** separating this project from ST6 (ST6 is push-only: a `status` column and a `LEFT JOIN LATERAL` attempt-rollup, no per-recipient read concept).
 
-4. **Why against the grain.** Marking items as read first means too many DB reads/writes (write amplification). Read-heavy anti-join is the deliberate choice to keep the write load down. This is the core thesis of the design.
+4. **Why against the grain — fan-out-on-read, not ordering.** The win is *not* serve-then-mark vs mark-then-serve (identical write count — conceded). It's **fan-out-on-read**: an event is **one insert at ingest**; per-customer delivered markers are written **lazily, only for events a customer actually reads**. The alternative (fan-out-on-write / push-materialization) inserts one row per subscriber at ingest — N rows for N subscribers — plus per-delivery status updates, whether or not they ever consume. For M subscribers of whom k actually poll: ~`1 + k` writes vs `M inserts + M updates`. Lightest footprint wins. **Honest tradeoff:** this moves cost from write-time to *read*-time (every poll is an anti-join over growing sets), acceptable only because the read side is bounded — cold-start by the `created_at` floor (#14), steady-state by the watermark question (open). The read path is also stateless and lock-free — no per-consumer cursor, no ack round-trip.
 
 5. **Finality.** The read is recorded when the `/inbox` call returns `200`. That 200 is the delivery event.
 
@@ -39,6 +39,10 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
     Separate paths, separate delivery stories, by design — do not conflate them. (The post-`200` client-crash razor on `/inbox` stays the accepted negligible gap per decision #6; whether an explicit ack should close it is the open ack-flow question.)
 
+14. **New-subscriber floor (`created_at` watermark).** A customer's `/inbox` anti-join is filtered `event.created_at > subscription.created_at` — a new subscriber starts from their subscription point, not the beginning of the stream. Kills the cold-start "bombarded with all history" blowup and its marker-write storm. Pivot on *subscription* created_at (not account created_at), so subscribing to a new event_type later starts from that subscription. Cold-start floor only — steady-state growth of the delivered set is separate (open holes).
+
+15. **Scaling = partition by customer (elaborates #8).** Shard across multiple DBs keyed on `customer_id`, with a routing API layer over the shards. The per-customer anti-join never crosses a shard, so it composes cleanly. This scales the **customer-count** axis. It does **not** bound a single long-lived customer's history growth — that is a separate, *temporal* axis handled by the watermark (open). Don't conflate the two.
+
 ## Stretch options (brief's advanced list — "explore 1 or 2")
 
 1. **Subscriptions & filtering — approach per ST6.** Customer-controlled one-hot `(customer, event_type) → URL` subscription matrix behind a read-through cache (`RWMutex`; a read colliding with a refresh briefly pauses). Filtering is late / delivery-time, so a subscription change takes effect on the next config poll with no redeploy. (Ref: ST6 — `customer-service/internal/cache`, `event-handler/internal/deliver`.)
@@ -57,5 +61,5 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 ## Open (not yet decided — do not invent)
 
-_None open._
+- **Steady-state read bounding (attack #5):** the `created_at` floor (#14) caps cold-start and partitioning (#15) caps customer-count, but a single long-lived customer's delivered set still grows and each poll anti-joins over it. Needs a watermark/compaction story — complicated by the at-least-once out-of-order gaps that make a contiguous high-water mark hard. Being worked.
 - **Contrast vs ST6:** what specifically the "finality" change is relative to the prior project.
