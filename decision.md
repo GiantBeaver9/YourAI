@@ -6,7 +6,11 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 1. **Storage.** Events are stored in the DB immediately on `POST`. Durable — not held in memory, not lost.
 
-2. **Ingress idempotency.** Enforced by a DB constraint on the way in. Idempotency is only a concern on ingest; not on delivery.
+2. **Ingress idempotency = composite `(customer_id, event_id)` unique key (resolved, attack #6).** `customer_id` is derived from the API key (#10); `event_id` is **producer-supplied and required**. The composite is the unique constraint on the events table, so a repeat insert of the same `(customer_id, event_id)` fails and is deduped (return the existing event). Load-bearing points:
+    - **The events table itself is the dedup structure** — no separate dedup set to grow or prune (kills the unbounded-set concern). The event's own key is the guard.
+    - **Producer owns the sameness signal:** same `event_id` = "the same event" (swallowed); a genuinely new occurrence uses a new `event_id`. So legitimate duplicates are never accidentally merged.
+    - **Bounded by retention `R` (#16):** dedup holds while the event is in the hot table; a duplicate arriving after archival (R = days/weeks, retries = seconds → theoretical only) would re-insert.
+    - The same producer `event_id` does double duty: ingest dedup key *and* the id consumers dedupe on for delivery dupes (#13). Idempotency is an ingest-only concern.
 
 3. **Delivery = against the grain (anti-join).** `/inbox` returns events not yet delivered to the customer — a `LEFT JOIN` against the delivered/read set, returning the rows with no match. We serve, then record the read (not mark-then-serve) — chosen to avoid locking/serializing the hot poll path, **not** for write economy. The anti-join is a **stateless "what hasn't this customer seen" query** (no per-consumer offset, no ack round-trip), **not** a dedup mechanism. `/inbox` is therefore **at-least-once**: under concurrent polls the same event may return twice, and consumers dedupe on event id (the standard webhook contract). This pull anti-join inbox is **one of the two defining features** separating this project from ST6 (ST6 is push-only: a `status` column and a `LEFT JOIN LATERAL` attempt-rollup, no per-recipient read concept).
 
