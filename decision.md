@@ -24,6 +24,22 @@ Record of decisions made. Author-driven. No design added beyond what's decided.
 
 10. **Customer identification.** `POST`/`GET` on inbox requires a `customer_id` or password to identify the customer. **Preferred for production:** an auth token that identifies the customer instead. That's out of scope now — recorded as the production direction, not built in v1.
 
+## Stretch options (brief's advanced list — "explore 1 or 2")
+
+1. **Subscriptions & filtering — approach per ST6.** Push by event type with matching. Filtering via a cache controlled by the customers, who choose how and where to receive items. Workers iterate over a list of queues guarded by mutexes to stay fair and avoid unwarranted double-sends. (Ref: ST6 project.)
+
+2. **Push delivery — approach per ST6.** Same mechanism as #1: deliver to registered consumer URLs with retry and backoff. (Ref: ST6.)
+
+3. **Delivery guarantees — at-least-once (per ST6).** Backoff and await a `200`; retry *before* writing into the DB. Exactly-once is explicitly not wanted in this situation. Rationale as stated: at-least-once will cause frustration if the end user's service ever goes down, so backoff + retry prior to the DB write is the correct course. (Ref: ST6.)
+
+4. **Shared inbox / multi-consumer — decided.** We write per customer (see decision #9); otherwise one customer ruins the read for everyone.
+
+5. **Monitoring & observability — approach per ST6.** Event counts, latencies, retries, delivery success rates. (Ref: ST6.)
+
+6. **DX enhancements (CLI / dashboard) — out of scope.** New; not worth getting into. Brief says explore 1–2, and several above are already covered.
+
+7. **Explorer UI — out of scope.** Not worth the time.
+
 ## Open (not yet decided — do not invent)
 
 - **`/last` and delivery state:** does `/last` record a read, or is it a read-only peek?
