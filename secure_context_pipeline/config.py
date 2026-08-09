@@ -91,8 +91,13 @@ class Settings:
     """Secrets and runtime config, from environment. Nothing hardcoded/committed."""
 
     master_key: bytes
+    #: LLM provider selection: "auto" (default) picks Gemini > Anthropic > Mock by which key is
+    #: present; force one with SCP_LLM_PROVIDER = mock | gemini | anthropic.
+    llm_provider: str = "auto"
     anthropic_api_key: str | None = None
-    llm_model: str = "claude-sonnet-4-5"
+    llm_model: str = "claude-sonnet-4-5"        # used by the Anthropic leg
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.0-flash"      # used by the Gemini leg
     store_root: str = "store_data"
     session_ttl_seconds: int = 3600
 
@@ -103,8 +108,12 @@ class Settings:
         master_key = bytes.fromhex(mk) if mk else os.urandom(32)
         return cls(
             master_key=master_key,
+            llm_provider=os.environ.get("SCP_LLM_PROVIDER", "auto"),
             anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"),
             llm_model=os.environ.get("SCP_LLM_MODEL", "claude-sonnet-4-5"),
+            # accept GEMINI_API_KEY or the common GOOGLE_API_KEY alias
+            gemini_api_key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"),
+            gemini_model=os.environ.get("SCP_GEMINI_MODEL", "gemini-2.0-flash"),
             store_root=os.environ.get("SCP_STORE_ROOT", "store_data"),
             session_ttl_seconds=int(os.environ.get("SCP_SESSION_TTL", "3600")),
         )

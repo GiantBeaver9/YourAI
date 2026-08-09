@@ -391,9 +391,10 @@ evidence that a human, not an LLM, designed this system.
 
 ## ADR-4: LLM injector / provider leg
 
-- **Interface first:** `LLMProvider` protocol (`async complete(payload) -> str`).
-  Anthropic and a `MockProvider` both implement it.
-- **Demo → real Anthropic call behind the interface, MockProvider as the default** so
+- **Interface first:** `LLMProvider` protocol (`async complete(payload) -> str`). The system is
+  **LLM-agnostic** — any provider that implements the protocol drops in (Gemini, Anthropic, a
+  local model), and a `MockProvider` implements it too. Provider choice is config, not code.
+- **Demo → real provider call behind the interface, MockProvider as the default** so
   `demo.py` and the test suite run with **zero key** and zero flakiness, but a real
   round-trip is one env var away. This is the "reviewers can run it AND you can show a
   genuine provider round-trip" position — don't hard-wire a live call into tests.
@@ -406,7 +407,7 @@ evidence that a human, not an LLM, designed this system.
 
 | | Demo | Prod |
 |---|---|---|
-| Providers | Mock default + Anthropic | Multi-provider w/ failover, per-tenant routing |
+| Providers | Mock default + one real provider (Gemini/Anthropic/…) | Multi-provider w/ failover, per-tenant routing |
 | Transport | single async call | streaming, retries w/ backoff, timeout budgets, circuit breaker |
 | Leak defense | pre-send assertion in tests | **egress proxy / DLP scan on the wire** as belt-and-suspenders + zero-retention contract |
 | Prompt | obfuscated context + task | + instructions to preserve tokens verbatim (helps de-obf recall) |
