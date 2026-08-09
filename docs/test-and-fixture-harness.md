@@ -84,8 +84,8 @@ leak must **fail** the oracle — proving the oracle can see leaks).
 | De-obf 500-token response < 500ms | timed assert |
 | Full pipeline < 15s | **mock LLM** (real-LLM latency reported separately, not gated in CI) |
 
-Real Anthropic call → a single integration test behind an env-var marker; never in the
-default suite (flaky, keyed).
+Real provider call (Gemini / Anthropic / any `LLMProvider`) → a single integration test behind
+an env-var marker; never in the default suite (flaky, keyed).
 
 ---
 

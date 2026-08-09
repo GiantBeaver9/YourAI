@@ -8,7 +8,9 @@ Run locally:   uvicorn secure_context_pipeline.api:app --reload
 Run on Railway: uvicorn secure_context_pipeline.api:app --host 0.0.0.0 --port $PORT
 
 Env:
-  ANTHROPIC_API_KEY  optional — real LLM leg; unset -> deterministic MockProvider
+  GEMINI_API_KEY     optional — real LLM leg (Gemini). Also ANTHROPIC_API_KEY for the Anthropic
+                     leg. Provider auto-selects by whichever key is set (Gemini preferred), or
+                     force it with SCP_LLM_PROVIDER=gemini|anthropic|mock. Unset -> MockProvider.
   SCP_MASTER_KEY     optional — 64 hex chars; unset -> ephemeral key generated at boot
   SCP_API_KEY        optional — if set, requests to /process and /obfuscate must send it as
                      `X-API-Key: <key>` (or `Authorization: Bearer <key>`). If UNSET the write

@@ -22,8 +22,10 @@ python demo.py             # end-to-end on the fixture (no API key needed — mo
 pytest                     # full suite incl. the zero-leakage property test
 ```
 
-No API key is required — the pipeline defaults to a deterministic `MockProvider`. Set
-`ANTHROPIC_API_KEY` to route the LLM leg to a real provider.
+No API key is required — the pipeline defaults to a deterministic `MockProvider`. To use a real
+model, set a provider key: **`GEMINI_API_KEY`** (Google Gemini, the intended real provider) or
+`ANTHROPIC_API_KEY`. The provider auto-selects by whichever key is present (Gemini preferred);
+force one with `SCP_LLM_PROVIDER=gemini|anthropic|mock`.
 
 ### Run as an HTTP service
 
@@ -43,8 +45,8 @@ it's unset). The Dockerfile serves this on `$PORT` by default — see **Deploy**
 The repo ships a `Dockerfile` (serves the API on `$PORT`) and `railway.json` (build + healthcheck
 on `/health`). In Railway: **New Project → Deploy from GitHub repo → this repo**, pick the branch
 (`main`), and set variables — `SCP_MASTER_KEY` (64 hex), `SCP_API_KEY` (a secret), and optionally
-`ANTHROPIC_API_KEY`. Railway injects `PORT`; do **not** set it yourself. Generate a public domain
-under the service's **Settings → Networking**.
+`GEMINI_API_KEY` (or `ANTHROPIC_API_KEY`). Railway injects `PORT`; do **not** set it yourself.
+Generate a public domain under the service's **Settings → Networking**.
 
 ---
 

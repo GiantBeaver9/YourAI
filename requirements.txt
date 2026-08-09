@@ -12,7 +12,9 @@ presidio-analyzer>=2.2
 fastapi>=0.110
 uvicorn[standard]>=0.29
 
-# Real LLM leg (optional — MockProvider is the keyless default)
+# Real LLM leg (optional — MockProvider is the keyless default).
+# Gemini is the intended real provider for this deployment (google-genai SDK).
+google-genai>=1.0
 anthropic>=0.39
 
 # Test / property-based

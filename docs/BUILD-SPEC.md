@@ -18,7 +18,8 @@ absent (so keyless CI can run), never as the default. No secrets hardcoded — a
 2. `Detector` (Protocol) — `PresidioDetector` is the substrate (rules-as-data compile into
    its recognizers); a native-regex `RuleEngineDetector` is the degraded fallback if Presidio
    isn't installed.
-3. `LLMProvider` (Protocol) — `MockProvider` (default) | `AnthropicProvider`.
+3. `LLMProvider` (Protocol) — **LLM-agnostic**: `MockProvider` (default) | any real provider
+   behind the protocol (Gemini, Anthropic, a local model). Provider choice is config, not code.
 4. `SessionVault` — concrete; Protocol only at the prod-swap seam (Redis).
 
 A fifth abstraction must be *earned*, not speculative.
@@ -58,7 +59,7 @@ A fifth abstraction must be *earned*, not speculative.
 6. **`deobfuscation/`** — token-grammar regex (from `grammar.py`) + affix tolerance (brackets delimit, so affixes are free) → vault.resolve → replace. **Leftover guard**: `grammar.has_token_residue` post-restore → fail closed. Vault-miss → never guess. Response-side net for pseudonyms (search known fakes) only when pseudonymization was used.
 7. **`audit/`** — JSON-lines sink; event = `{ts, session_id, entity_type, token, action, policy_version}`. **NEVER original values.** A test greps output for fixture PII → zero hits.
 8. **`store/`** — envelope encryption: master (env) → per-user KEK → per-doc DEK; AES-256-GCM with AAD=(user_id,doc_id,key_version); per-user-key isolation; file-based under `store_root`. Extracted plaintext never persisted unencrypted.
-9. **`llm/`** — `LLMProvider` protocol; `MockProvider` (deterministic, echoes tokens back in a plausible reply — used by tests/demo, keyless); `AnthropicProvider` (real, behind env key). `ContextInjector.build_request(obfuscated_text, task, known_originals) -> LLMRequest` — inline (no sidecar), token-preservation system prompt, **verify-before-send**. Chunking: single-call when it fits; else `asyncio.gather` bounded by semaphore, results in input order (chunk i → slot i), obfuscate-whole-first so vault is read-only during fan-out (no locks); per-chunk verify.
+9. **`llm/`** — `LLMProvider` protocol; `MockProvider` (deterministic, echoes tokens back in a plausible reply — used by tests/demo, keyless); one or more real providers behind the protocol (Gemini, Anthropic, …), selected by config/env — the leg is LLM-agnostic. `ContextInjector.build_request(obfuscated_text, task, known_originals) -> LLMRequest` — inline (no sidecar), token-preservation system prompt, **verify-before-send**. Chunking: single-call when it fits; else `asyncio.gather` bounded by semaphore, results in input order (chunk i → slot i), obfuscate-whole-first so vault is read-only during fan-out (no locks); per-chunk verify.
 10. **`pipeline/`** — async orchestration: (store read) → detect → obfuscate → inject → LLM → de-obf → restore. Returns user-facing restored text. Holds a session lease across the round-trip.
 11. **`tests/`** — pytest + pytest-asyncio:
     - **Leakage property test** (Hypothesis): generate docs with ground-truth synthetic PII (Faker, seeded) → assert no original value (exact + fragment + normalized) in the outbound payload. Oracle tested with a planted leak (must fail).

@@ -19,10 +19,26 @@ from ..deobfuscation.deobfuscator import Deobfuscator, DeobfuscationResult
 from ..detection.factory import build_detector
 from ..detection.rules import Rule
 from ..llm.injector import ContextInjector, complete_with_chunking
-from ..llm.provider import AnthropicProvider, LLMProvider, MockProvider
+from ..llm.provider import AnthropicProvider, GeminiProvider, LLMProvider, MockProvider
 from ..obfuscation.engine.engine import ObfuscationEngine, ObfuscationResult
 from ..store.store import EncryptedDocumentStore
 from ..vault.session import Session, SessionManager
+
+
+def select_provider_name(settings: Settings) -> str:
+    """Decide which LLM provider to use — pure, SDK-free, so it's unit-testable.
+
+    Explicit ``SCP_LLM_PROVIDER`` wins; otherwise auto-select by which key is present, preferring
+    **Gemini** over Anthropic (this deployment runs on Gemini credit), then falling back to the
+    keyless MockProvider."""
+    choice = (settings.llm_provider or "auto").lower()
+    if choice in ("mock", "gemini", "anthropic"):
+        return choice
+    if settings.gemini_api_key:
+        return "gemini"
+    if settings.anthropic_api_key:
+        return "anthropic"
+    return "mock"
 
 
 @dataclass
@@ -60,7 +76,10 @@ class SecureContextPipeline:
         self._deobf = Deobfuscator(audit=self.audit)
 
     def _default_provider(self) -> LLMProvider:
-        if self.settings.anthropic_api_key:
+        name = select_provider_name(self.settings)
+        if name == "gemini":
+            return GeminiProvider(self.settings.gemini_api_key, self.settings.gemini_model)
+        if name == "anthropic":
             return AnthropicProvider(self.settings.anthropic_api_key, self.settings.llm_model)
         return MockProvider()
 
