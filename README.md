@@ -48,6 +48,11 @@ on `/health`). In Railway: **New Project → Deploy from GitHub repo → this re
 `GEMINI_API_KEY` (or `ANTHROPIC_API_KEY`). Railway injects `PORT`; do **not** set it yourself.
 Generate a public domain under the service's **Settings → Networking**.
 
+**End users:** see [`USAGE.md`](USAGE.md) for a plain-language guide. Once deployed, the browser
+test console lives at **`/demo`**, interactive API docs at **`/docs`**, and a full test battery
+runs via [`scripts/test_api.bat`](scripts/test_api.bat) (Windows) or
+[`scripts/test_api.sh`](scripts/test_api.sh) (macOS/Linux).
+
 ---
 
 ## Design thesis: determinism is the security control
