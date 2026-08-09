@@ -37,8 +37,18 @@ app = FastAPI(
     description="PII/PHI obfuscation between a document store and external LLM providers.",
 )
 
-# One pipeline for the process; sessions are per-request and ephemeral.
-_pipeline = SecureContextPipeline()
+# Lazy singleton. Building the pipeline loads the Presidio/spaCy model, which is slow and
+# memory-heavy — doing it at import would delay the first /health and can blow Railway's
+# healthcheck window. Instead the container starts instantly, /health answers immediately, and
+# the model loads on the first real request.
+_pipeline: SecureContextPipeline | None = None
+
+
+def _get_pipeline() -> SecureContextPipeline:
+    global _pipeline
+    if _pipeline is None:
+        _pipeline = SecureContextPipeline()
+    return _pipeline
 
 
 @app.on_event("startup")
@@ -100,12 +110,13 @@ async def health() -> dict:
 
 @app.get("/")
 async def root() -> dict:
+    pipe = _get_pipeline()
     return {
         "service": "secure-context-pipeline",
         "version": __version__,
-        "detector": _pipeline.detector.name,
-        "provider": _pipeline.provider.name,
-        "custom_rules_loaded": len(_pipeline.custom_rules),
+        "detector": pipe.detector.name,
+        "provider": pipe.provider.name,
+        "custom_rules_loaded": len(pipe.custom_rules),
         "endpoints": ["/health", "/demo", "/process (POST)", "/obfuscate (POST)", "/docs"],
     }
 
@@ -113,12 +124,13 @@ async def root() -> dict:
 @app.post("/process", response_model=ProcessResponse, dependencies=[Depends(_require_api_key)])
 async def process(req: ProcessRequest) -> ProcessResponse:
     """Full round-trip: detect → obfuscate → LLM → restore. Returns the restored answer."""
+    pipe = _get_pipeline()
     doc_id = req.doc_id or ("req_" + os.urandom(6).hex())
-    session = _pipeline.sessions.create_session("api-user")
+    session = pipe.sessions.create_session("api-user")
     try:
-        result = await _pipeline.process(session, doc_id, req.task, text=req.text)
+        result = await pipe.process(session, doc_id, req.task, text=req.text)
     finally:
-        await _pipeline.sessions.destroy(session.session_id)  # crypto-shred per request
+        await pipe.sessions.destroy(session.session_id)  # crypto-shred per request
 
     obf = result.obfuscation
     return ProcessResponse(
@@ -126,7 +138,7 @@ async def process(req: ProcessRequest) -> ProcessResponse:
         routed_to_human=result.routed_to_human,
         meta={
             "detector": obf.detector_name,
-            "provider": _pipeline.provider.name,
+            "provider": pipe.provider.name,
             "entities_detected": len(obf.entities),
             "tokens_restored": result.deobfuscation.tokens_restored if result.deobfuscation else 0,
             "deobfuscation_clean": result.deobfuscation.clean if result.deobfuscation else None,
@@ -137,10 +149,11 @@ async def process(req: ProcessRequest) -> ProcessResponse:
 @app.post("/obfuscate", response_model=ObfuscateResponse, dependencies=[Depends(_require_api_key)])
 async def obfuscate(req: ProcessRequest) -> ObfuscateResponse:
     """Inspect the outbound payload only — what WOULD be sent to the LLM (contains no PII)."""
+    pipe = _get_pipeline()
     doc_id = req.doc_id or ("req_" + os.urandom(6).hex())
-    session = _pipeline.sessions.create_session("api-user")
+    session = pipe.sessions.create_session("api-user")
     try:
-        obf = await _pipeline._engine.obfuscate(req.text, session, doc_id)  # noqa: SLF001
+        obf = await pipe._engine.obfuscate(req.text, session, doc_id)  # noqa: SLF001
         counts: dict[str, int] = {}
         for e in obf.entities:
             counts[e.entity_type.value] = counts.get(e.entity_type.value, 0) + 1
@@ -151,7 +164,7 @@ async def obfuscate(req: ProcessRequest) -> ObfuscateResponse:
             detector=obf.detector_name,
         )
     finally:
-        await _pipeline.sessions.destroy(session.session_id)
+        await pipe.sessions.destroy(session.session_id)
 
 
 # --------------------------------------------------------------------------------------------
