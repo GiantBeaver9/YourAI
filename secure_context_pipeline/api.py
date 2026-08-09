@@ -105,7 +105,8 @@ async def root() -> dict:
         "version": __version__,
         "detector": _pipeline.detector.name,
         "provider": _pipeline.provider.name,
-        "endpoints": ["/health", "/process (POST)", "/obfuscate (POST)", "/docs"],
+        "custom_rules_loaded": len(_pipeline.custom_rules),
+        "endpoints": ["/health", "/demo", "/process (POST)", "/obfuscate (POST)", "/docs"],
     }
 
 

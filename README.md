@@ -57,7 +57,7 @@ runs via [`scripts/test_api.bat`](scripts/test_api.bat) (Windows) or
 
 ## Design thesis: determinism is the security control
 
-The challenge's own framing — *"contractual guarantees are not sufficient; we need a
+The core requirement — *"contractual guarantees are not sufficient; we need a
 technical guarantee"* — extends one step: **a probabilistic detector is not a sufficient
 technical guarantee either.** Making an LLM's recall your security boundary means you can't
 *prove* anything, can't reproduce a leak to fix it, and — if the model is remote — you've
@@ -112,6 +112,31 @@ Why not LLM-based detection? A remote LLM detector ships raw PII to find PII —
 for this exact threat model. A *local* model is a legitimate prod recall-backstop; it's noted
 as designed-not-built here.
 
+### Updating detection rules (no code change)
+
+Because detection is rules-as-data, a deployment can add or adjust rules without touching code.
+Author them in a JSON file and point `SCP_CUSTOM_RULES_PATH` at it, then redeploy:
+
+```json
+{ "rules": [
+  { "id": "hospital_mrn", "entity_type": "MRN", "regex": "AH-\\d{6}", "confidence": 0.95 },
+  { "id": "badge", "entity_type": "GENERIC_ID",
+    "preceding": "(?:Badge|Employee\\s*ID)\\s*[:#]\\s*", "regex": "[A-Z]{2}\\d{4,8}" }
+] }
+```
+
+Each row is a `Rule` (anchor `preceding` · value `regex` · boundary `succeeding` · `entity_type`
+· `action`), the same shape the built-in Safe Harbor rules use — so "a new identifier is a row,
+not a deploy of new code." Rules are **additive** (they can catch *more*, never suppress a
+standard rule); every pattern is compiled-validated at load, and a bad one is skipped-and-logged
+rather than crashing the service. See [`custom_rules.example.json`](custom_rules.example.json)
+and `GET /` reports how many custom rules loaded.
+
+The fully self-service, *runtime* authoring surface — RE2 intake validation that provably
+rejects catastrophic-backtracking regexes, plus a live example/preview panel — is the documented
+next step (`docs/detection-rules-engine.md`); this operator-file path is its trusted-input
+subset, safe to ship today.
+
 ---
 
 ## Obfuscation — three primitives, routed per entity
@@ -151,7 +176,7 @@ restored.
 
 ---
 
-## The vault (30% of the security story)
+## The vault
 
 A session owns one **random, ephemeral root key `K_s`**. From it we HKDF two subkeys:
 `k_token` (HMAC → deterministic one-way tokens) and `k_enc` (AES-256-GCM → the encrypted
@@ -183,7 +208,8 @@ the durable per-user store key and the ephemeral `K_s` are deliberately independ
   tokenizes differently across sessions *and* across documents — no persistent pseudonym to
   link on.
 
-Residual, and named: **quasi-identifier combination** (Sweeney: ZIP+DOB+sex ≈ 87%) survives
+Residual, and named: **quasi-identifier combination** (Sweeney: ZIP + DOB + sex uniquely
+identifies the vast majority of the US population) survives
 because the model must reason per-patient — governed by an explicit, logged `ObfuscationPolicy`
 knob, not hidden.
 
