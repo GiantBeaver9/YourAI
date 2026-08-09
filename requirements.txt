@@ -8,6 +8,10 @@ presidio-analyzer>=2.2
 # Presidio needs a spaCy model at runtime:
 #   python -m spacy download en_core_web_sm
 
+# HTTP service (deployment entrypoint — see secure_context_pipeline/api.py)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
 # Real LLM leg (optional — MockProvider is the keyless default)
 anthropic>=0.39
 
