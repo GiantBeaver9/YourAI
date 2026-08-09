@@ -100,6 +100,9 @@ class Settings:
     gemini_model: str = "gemini-2.0-flash"      # used by the Gemini leg
     store_root: str = "store_data"
     session_ttl_seconds: int = 3600
+    #: Optional path to a JSON file of deployment-authored detection rules (see
+    #: detection.rules.load_custom_rules). Edit the file + redeploy to update detection — no code.
+    custom_rules_path: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -116,4 +119,5 @@ class Settings:
             gemini_model=os.environ.get("SCP_GEMINI_MODEL", "gemini-2.0-flash"),
             store_root=os.environ.get("SCP_STORE_ROOT", "store_data"),
             session_ttl_seconds=int(os.environ.get("SCP_SESSION_TTL", "3600")),
+            custom_rules_path=os.environ.get("SCP_CUSTOM_RULES_PATH"),
         )

@@ -102,6 +102,19 @@ Set these in **Railway → your service → Variables**:
 Presidio, and the LLM reply is a deterministic stub. **Real mode:** add `GEMINI_API_KEY` and
 redeploy; it switches to Gemini automatically, no code change.
 
+### Updating detection rules (no code change)
+
+Detection is rules-as-data, so you can add site-specific identifiers without editing code:
+
+1. Copy [`custom_rules.example.json`](custom_rules.example.json) to `custom_rules.json` and edit it.
+2. Set `SCP_CUSTOM_RULES_PATH=custom_rules.json` in Railway → Variables (commit the file to the repo).
+3. Redeploy. `GET /` will report `custom_rules_loaded: N`.
+
+Each rule has an optional `preceding` anchor, a value `regex`, an optional `succeeding` boundary,
+an `entity_type`, and an `action`. Rules are **additive** (catch more, never suppress a built-in
+rule); a malformed regex is skipped and logged, never crashes the service. Full runtime
+self-service authoring (with RE2 validation + a live preview) is the documented next step.
+
 ---
 
 ## 6. Run it locally (optional)

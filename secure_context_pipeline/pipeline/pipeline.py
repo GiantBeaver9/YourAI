@@ -66,7 +66,14 @@ class SecureContextPipeline:
         self.settings = settings or Settings.from_env()
         self.policy = policy or ObfuscationPolicy()
         self.audit = audit or AuditLog()
-        self.detector = detector or build_detector(self.policy, custom_rules)
+        # Load deployment-authored rules from the configured file when none were passed in —
+        # the operator "update the rules" path (edit JSON + redeploy, no code change).
+        if custom_rules is None and self.settings.custom_rules_path:
+            from ..detection.rules import load_custom_rules
+
+            custom_rules = load_custom_rules(self.settings.custom_rules_path)
+        self.custom_rules = custom_rules or []
+        self.detector = detector or build_detector(self.policy, self.custom_rules)
         self.provider = provider or self._default_provider()
         self.store = store or EncryptedDocumentStore(self.settings.master_key, self.settings.store_root)
         self.sessions = SessionManager(self.settings.session_ttl_seconds)

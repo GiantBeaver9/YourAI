@@ -1,0 +1,32 @@
+{
+  "_comment": "Deployment-authored detection rules. Copy to custom_rules.json, edit, and point SCP_CUSTOM_RULES_PATH at it (then redeploy). Each rule is ADDITIVE — it can catch more, never suppress a standard rule. Fields: id (required), name, entity_type, regex, preceding (label/anchor before the value), succeeding (boundary after), action (scrub|obfuscate), enabled, priority, confidence, ignore_case.",
+  "rules": [
+    {
+      "id": "hospital_mrn",
+      "name": "Acme Health MRN format (AH-######)",
+      "entity_type": "MRN",
+      "regex": "AH-\\d{6}",
+      "priority": 92,
+      "confidence": 0.95
+    },
+    {
+      "id": "employee_badge",
+      "name": "Employee badge ID (labeled)",
+      "entity_type": "GENERIC_ID",
+      "preceding": "(?:Badge|Employee\\s*ID)\\s*[:#]\\s*",
+      "regex": "[A-Z]{2}\\d{4,8}",
+      "priority": 85,
+      "confidence": 0.9
+    },
+    {
+      "id": "project_code",
+      "name": "Internal project code (PRJ-####)",
+      "entity_type": "GENERIC_ID",
+      "regex": "PRJ-\\d{4}",
+      "action": "scrub",
+      "enabled": true,
+      "priority": 70,
+      "confidence": 0.85
+    }
+  ]
+}

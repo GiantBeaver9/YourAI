@@ -15,10 +15,14 @@ validation + example/preview panel) is designed-not-built — see the design doc
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 from dataclasses import dataclass
 
 from ..entities import EntityType
+
+log = logging.getLogger("scp.rules")
 
 # Value captured in a named group so anchored rules return the *value* span, not the label.
 _VAL = "scp_val"
@@ -217,3 +221,62 @@ STANDARD_RULES: list[Rule] = [
          succeeding=r",[ ]+(?:" + "|".join(CITY_STATES) + r")\b",
          priority=76, confidence=0.8, ignore_case=False),
 ]
+
+
+def load_custom_rules(path: str) -> list[Rule]:
+    """Load deployment-authored detection rules from a JSON file — "a new entity type is a row".
+
+    This is the supported *operator* path for updating detection without a code change: edit the
+    file, redeploy. The file is operator-controlled (trusted), so each regex is validated by a
+    plain ``re.compile`` at load — a bad pattern is skipped-and-logged, never crashes the service.
+    Rules are **additive**: custom rules can catch *more*, never suppress a standard rule.
+
+    (The fully self-service, runtime authoring surface — RE2 intake validation that provably
+    rejects catastrophic-backtracking patterns, plus a live example/preview panel — is the
+    documented next step in ``docs/detection-rules-engine.md``; this file-based path is its
+    trusted-input subset.)
+
+    JSON shape — either a top-level list, or ``{"rules": [ ... ]}``. Each row:
+        {"id","name","entity_type","regex","preceding","succeeding",
+         "action","enabled","priority","confidence","ignore_case"}
+    Only ``id`` is required. ``entity_type`` must be a known type (unknown -> GENERIC_ID)."""
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    rows = data.get("rules", []) if isinstance(data, dict) else data
+
+    rules: list[Rule] = []
+    for row in rows:
+        rid = row.get("id")
+        if not rid:
+            log.warning("custom rule skipped: missing 'id'")
+            continue
+        try:
+            entity = EntityType(row.get("entity_type", "GENERIC_ID"))
+        except ValueError:
+            log.warning("custom rule %s: unknown entity_type %r -> GENERIC_ID",
+                        rid, row.get("entity_type"))
+            entity = EntityType.GENERIC_ID
+
+        # Validate every supplied pattern compiles; skip the whole rule if any doesn't (fail closed).
+        bad = False
+        for field_name in ("preceding", "regex", "succeeding"):
+            pat = row.get(field_name)
+            if pat is not None:
+                try:
+                    re.compile(pat)
+                except re.error as exc:
+                    log.warning("custom rule %s: bad %s regex (%s) -> skipped", rid, field_name, exc)
+                    bad = True
+        if bad:
+            continue
+
+        rules.append(Rule(
+            id=str(rid), name=row.get("name", str(rid)), entity_type=entity,
+            regex=row.get("regex"), preceding=row.get("preceding"),
+            succeeding=row.get("succeeding"), action=row.get("action", "scrub"),
+            enabled=bool(row.get("enabled", True)), source="custom",
+            priority=int(row.get("priority", 50)), confidence=float(row.get("confidence", 0.8)),
+            ignore_case=bool(row.get("ignore_case", True)),
+        ))
+    log.info("loaded %d custom rule(s) from %s", len(rules), path)
+    return rules
