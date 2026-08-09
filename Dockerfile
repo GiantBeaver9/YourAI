@@ -10,8 +10,14 @@ RUN apt-get update \
 # Install dependencies first (better layer caching), including the Presidio substrate and its
 # spaCy model — Presidio is the intended detection engine in the reproducible image.
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt pytest pytest-asyncio hypothesis \
-    && python -m spacy download en_core_web_sm
+RUN pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt \
+        pytest pytest-asyncio hypothesis
+# spaCy model for the Presidio detector. Non-fatal: if the download flakes on the network, the
+# build still succeeds and the service falls back to the native-regex detector at runtime
+# (build_detector) instead of failing the whole deploy. Retried a couple of times first.
+RUN python -m spacy download en_core_web_sm \
+    || python -m spacy download en_core_web_sm \
+    || echo "WARNING: spaCy model download failed; native-regex detector will be used"
 
 COPY . .
 RUN pip install --no-cache-dir -e .
