@@ -19,4 +19,8 @@ RUN pip install --no-cache-dir -e .
 # No secrets baked in: an ephemeral master key is generated at runtime if SCP_MASTER_KEY is
 # unset (config.Settings.from_env). Provide ANTHROPIC_API_KEY to use a real LLM; the default
 # is the keyless MockProvider.
-CMD ["sh", "-c", "pytest -q && python demo.py"]
+#
+# Default command serves the HTTP API on $PORT (Railway/most PaaS inject PORT; fall back to 8000
+# for local `docker run`). `docker-compose up` overrides this to run the tests + demo instead.
+EXPOSE 8000
+CMD ["sh", "-c", "uvicorn secure_context_pipeline.api:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -25,6 +25,27 @@ pytest                     # full suite incl. the zero-leakage property test
 No API key is required — the pipeline defaults to a deterministic `MockProvider`. Set
 `ANTHROPIC_API_KEY` to route the LLM leg to a real provider.
 
+### Run as an HTTP service
+
+```bash
+pip install -e ".[api]"
+uvicorn secure_context_pipeline.api:app --host 0.0.0.0 --port 8000   # $PORT on a PaaS
+# GET /health  ·  GET /  ·  POST /process  ·  POST /obfuscate  ·  /docs (OpenAPI)
+```
+
+`POST /process` runs the full round-trip on one request (its own ephemeral session, crypto-shred
+on return) and returns the restored answer; `POST /obfuscate` returns only the outbound payload
+for inspection. Set `SCP_API_KEY` to require `X-API-Key` on the write endpoints (they are open if
+it's unset). The Dockerfile serves this on `$PORT` by default — see **Deploy** below.
+
+### Deploy (Railway, GitHub-pull)
+
+The repo ships a `Dockerfile` (serves the API on `$PORT`) and `railway.json` (build + healthcheck
+on `/health`). In Railway: **New Project → Deploy from GitHub repo → this repo**, pick the branch
+(`main`), and set variables — `SCP_MASTER_KEY` (64 hex), `SCP_API_KEY` (a secret), and optionally
+`ANTHROPIC_API_KEY`. Railway injects `PORT`; do **not** set it yourself. Generate a public domain
+under the service's **Settings → Networking**.
+
 ---
 
 ## Design thesis: determinism is the security control

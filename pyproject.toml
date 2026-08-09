@@ -21,6 +21,10 @@ presidio = [
 llm = [
     "anthropic>=0.39",
 ]
+api = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
 test = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
