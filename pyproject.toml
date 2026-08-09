@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "secure-context-pipeline"
+version = "0.1.0"
+description = "PII/PHI obfuscation between a document store and external LLM providers."
+requires-python = ">=3.10"
+dependencies = [
+    "cryptography>=41.0",
+    "faker>=24.0",
+]
+
+[project.optional-dependencies]
+# Presidio is the intended detection substrate. Kept optional so keyless CI can run on the
+# native-regex fallback when the (heavier) Presidio + spaCy model stack is not installed.
+presidio = [
+    "presidio-analyzer>=2.2",
+]
+llm = [
+    "anthropic>=0.39",
+]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "hypothesis>=6.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["secure_context_pipeline*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

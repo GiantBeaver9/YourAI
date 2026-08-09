@@ -44,6 +44,12 @@ class SessionVault:
     def entity_type_of(self, token: str) -> str | None:
         return self._types.get(token)
 
+    def surfaces(self) -> list[str]:
+        """Emitted surfaces (map keys) — tokens AND pseudonym strings. Used by the
+        response-side net to search a model reply for known pseudonyms. The keys are the
+        obfuscated forms, never the originals, so exposing them leaks nothing."""
+        return list(self._map.keys())
+
     def __len__(self) -> int:
         return len(self._map)
 

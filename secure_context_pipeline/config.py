@@ -34,7 +34,9 @@ DEFAULT_ROUTING: dict[EntityType, Action] = {
     EntityType.EMAIL: Action.TOKENIZE,
     EntityType.PHONE: Action.TOKENIZE,
     EntityType.ADDRESS: Action.TOKENIZE,
-    EntityType.ZIP: Action.TOKENIZE,
+    # ZIP -> generalize to the 3-digit prefix (Safe Harbor #17), zeroing restricted prefixes.
+    # One-way and truthful (like dates), which is stronger than tokenizing an opaque ZIP.
+    EntityType.ZIP: Action.GENERALIZE,
     EntityType.IP: Action.TOKENIZE,
     EntityType.URL: Action.TOKENIZE,
     EntityType.MEDICATION: Action.TOKENIZE,
