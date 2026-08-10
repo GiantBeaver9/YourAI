@@ -7,6 +7,15 @@ and the model's response is transparently restored before the user sees it.
 
 **detect → obfuscate → call LLM → restore.**
 
+### 🔗 Live service
+
+- **Base URL:** https://merry-playfulness-production-d238.up.railway.app
+- **Browser test console:** https://merry-playfulness-production-d238.up.railway.app/demo
+- **Interactive API docs:** https://merry-playfulness-production-d238.up.railway.app/docs
+- **Health:** https://merry-playfulness-production-d238.up.railway.app/health
+
+Write endpoints require the `X-API-Key` header (see [API reference](#api-reference)).
+
 ---
 
 ## Quick start
@@ -84,10 +93,10 @@ All endpoints. Write endpoints require the `X-API-Key` header when `SCP_API_KEY`
 - **`/rules`** returns `{custom_rules, standard_rules, …counts}` so you can see exactly what's
   active. Add custom rules via the file path above (there is no runtime write endpoint yet).
 
-### How to test (Windows CMD — swap in your domain)
+### How to test (Windows CMD)
 
 ```cmd
-set BASE=https://YOUR-APP.up.railway.app
+set BASE=https://merry-playfulness-production-d238.up.railway.app
 set KEY=scp_yourkey
 
 curl %BASE%/health
