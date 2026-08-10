@@ -40,6 +40,19 @@ def test_unknown_entity_type_falls_back_to_generic(tmp_path):
     assert load_custom_rules(path)[0].entity_type is EntityType.GENERIC_ID
 
 
+def test_missing_rules_file_does_not_crash_pipeline():
+    # A misconfigured SCP_CUSTOM_RULES_PATH must not take down the service.
+    from secure_context_pipeline import SecureContextPipeline, Settings
+    from secure_context_pipeline.llm.provider import MockProvider
+
+    settings = Settings(master_key=b"\x0a" * 32, custom_rules_path="does_not_exist.json")
+    pipe = SecureContextPipeline(
+        settings=settings, detector=RuleEngineDetector(ObfuscationPolicy()),
+        provider=MockProvider(),
+    )
+    assert pipe.custom_rules == []
+
+
 def test_custom_rule_detects_new_pattern(tmp_path):
     path = _write(tmp_path, {"rules": [
         {"id": "proj", "entity_type": "GENERIC_ID", "regex": r"PRJ-\d{4}", "confidence": 0.9},

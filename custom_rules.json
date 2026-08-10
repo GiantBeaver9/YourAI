@@ -1,0 +1,4 @@
+{
+  "_comment": "Active deployment rules loaded when SCP_CUSTOM_RULES_PATH=custom_rules.json. Starts empty. Add rows (see custom_rules.example.json for the shape) and redeploy. Each rule is ADDITIVE and its regex is compile-validated on load; a bad rule is skipped and logged, never crashes the service.",
+  "rules": []
+}
