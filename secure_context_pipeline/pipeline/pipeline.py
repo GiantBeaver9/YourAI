@@ -11,6 +11,7 @@ so any leg swaps for a test double or a prod implementation without touching the
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from ..audit.audit import AuditLog
@@ -71,7 +72,14 @@ class SecureContextPipeline:
         if custom_rules is None and self.settings.custom_rules_path:
             from ..detection.rules import load_custom_rules
 
-            custom_rules = load_custom_rules(self.settings.custom_rules_path)
+            try:
+                custom_rules = load_custom_rules(self.settings.custom_rules_path)
+            except Exception as exc:  # noqa: BLE001 — a rules-file problem must never crash boot
+                logging.getLogger("scp.pipeline").warning(
+                    "could not load custom rules from %s: %s — continuing with none",
+                    self.settings.custom_rules_path, exc,
+                )
+                custom_rules = []
         self.custom_rules = custom_rules or []
         self.detector = detector or build_detector(self.policy, self.custom_rules)
         self.provider = provider or self._default_provider()
