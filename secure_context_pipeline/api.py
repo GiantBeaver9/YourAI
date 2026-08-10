@@ -21,12 +21,14 @@ from __future__ import annotations
 
 import logging
 import os
+from io import BytesIO
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from . import __version__
+from .detection.rules import STANDARD_RULES, Rule
 from .pipeline import SecureContextPipeline
 
 log = logging.getLogger("scp.api")
@@ -117,7 +119,8 @@ async def root() -> dict:
         "detector": pipe.detector.name,
         "provider": pipe.provider.name,
         "custom_rules_loaded": len(pipe.custom_rules),
-        "endpoints": ["/health", "/demo", "/process (POST)", "/obfuscate (POST)", "/docs"],
+        "endpoints": ["/health", "/demo", "/rules (GET)", "/process (POST)",
+                      "/process-pdf (POST)", "/obfuscate (POST)", "/docs"],
     }
 
 
@@ -165,6 +168,81 @@ async def obfuscate(req: ProcessRequest) -> ObfuscateResponse:
         )
     finally:
         await pipe.sessions.destroy(session.session_id)
+
+
+def _rule_to_dict(r: Rule) -> dict:
+    return {
+        "id": r.id, "name": r.name, "entity_type": r.entity_type.value, "source": r.source,
+        "regex": r.regex, "preceding": r.preceding, "succeeding": r.succeeding,
+        "action": r.action, "enabled": r.enabled, "priority": r.priority,
+        "confidence": r.confidence, "ignore_case": r.ignore_case,
+    }
+
+
+@app.get("/rules", dependencies=[Depends(_require_api_key)])
+async def list_rules() -> dict:
+    """List all detection rules — the deployment-authored custom rows in full, plus the
+    built-in Safe Harbor standard rules (id + type). Read-only view of what's active."""
+    pipe = _get_pipeline()
+    return {
+        "custom_rules_count": len(pipe.custom_rules),
+        "custom_rules": [_rule_to_dict(r) for r in pipe.custom_rules],
+        "standard_rules_count": len(STANDARD_RULES),
+        "standard_rules": [{"id": r.id, "name": r.name, "entity_type": r.entity_type.value}
+                           for r in STANDARD_RULES],
+    }
+
+
+@app.post("/process-pdf", response_model=ProcessResponse, dependencies=[Depends(_require_api_key)])
+async def process_pdf(
+    file: UploadFile = File(..., description="A text-based PDF."),
+    task: str = Form("Summarize this document."),
+) -> ProcessResponse:
+    """Ingest a PDF over a byte stream (multipart upload), extract its text, and run the full
+    round-trip. **Scanned / image-only PDFs are quarantined** (no extractable text) and routed
+    to human review rather than silently mis-processed — the image-quarantine policy."""
+    try:
+        from pypdf import PdfReader
+    except ModuleNotFoundError as exc:  # pragma: no cover
+        raise HTTPException(status_code=501, detail="PDF support not installed (pip install pypdf)") from exc
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="empty upload")
+    try:
+        reader = PdfReader(BytesIO(data))
+        pages = reader.pages
+        text = "\n".join((p.extract_text() or "") for p in pages)
+    except Exception as exc:  # noqa: BLE001 — malformed/encrypted PDF -> client error, not 500
+        raise HTTPException(status_code=400, detail=f"could not read PDF: {exc}") from exc
+
+    if len(text.strip()) < 20:  # scanned/image PDF -> quarantine, don't guess
+        return ProcessResponse(
+            restored_text=None, routed_to_human=True,
+            meta={"pages": len(pages), "chars_extracted": len(text.strip()),
+                  "reason": "no extractable text (scanned/image PDF) — needs OCR/human review "
+                            "(image-quarantine policy)"},
+        )
+
+    pipe = _get_pipeline()
+    doc_id = "pdf_" + os.urandom(6).hex()
+    session = pipe.sessions.create_session("api-user")
+    try:
+        result = await pipe.process(session, doc_id, task, text=text)
+    finally:
+        await pipe.sessions.destroy(session.session_id)
+
+    obf = result.obfuscation
+    return ProcessResponse(
+        restored_text=result.restored_text, routed_to_human=result.routed_to_human,
+        meta={
+            "pages": len(pages), "chars_extracted": len(text),
+            "detector": obf.detector_name, "provider": pipe.provider.name,
+            "entities_detected": len(obf.entities),
+            "tokens_restored": result.deobfuscation.tokens_restored if result.deobfuscation else 0,
+            "deobfuscation_clean": result.deobfuscation.clean if result.deobfuscation else None,
+        },
+    )
 
 
 # --------------------------------------------------------------------------------------------

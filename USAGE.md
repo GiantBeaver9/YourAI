@@ -33,14 +33,23 @@ No install, no shell quoting. Best for a live walkthrough.
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | `GET` | `/health` | none | Liveness — `{"status":"ok"}` |
-| `GET` | `/` | none | Service info (active detector + provider) |
+| `GET` | `/` | none | Service info (active detector + provider + custom-rule count) |
 | `GET` | `/demo` | none | Browser test console |
 | `GET` | `/docs` | none | OpenAPI / Swagger UI |
+| `GET` | `/rules` | API key | List all rules (custom rows in full + built-in Safe Harbor) |
 | `POST` | `/obfuscate` | API key | Returns only the **outbound payload** (no PII) |
 | `POST` | `/process` | API key | Full **detect → obfuscate → LLM → restore** round-trip |
+| `POST` | `/process-pdf` | API key | **PDF upload → extract text → same pipeline** (image PDFs quarantined) |
 
-`POST` bodies are JSON: `{"text": "...", "task": "...", "doc_id": "optional"}`.
-The API key (if configured) goes in the **`X-API-Key`** header (or `Authorization: Bearer <key>`).
+`POST` (JSON) bodies are `{"text": "...", "task": "...", "doc_id": "optional"}`; `/process-pdf`
+is a `multipart/form-data` upload (`file=@doc.pdf`, optional `task` field). The API key (if
+configured) goes in the **`X-API-Key`** header (or `Authorization: Bearer <key>`).
+
+**List the active rules / send a PDF (CMD):**
+```cmd
+curl -H "X-API-Key: YOUR_KEY" https://merry-playfulness-production-d238.up.railway.app/rules
+curl -X POST https://merry-playfulness-production-d238.up.railway.app/process-pdf -H "X-API-Key: YOUR_KEY" -F "file=@note.pdf" -F "task=Summarize."
+```
 
 ---
 

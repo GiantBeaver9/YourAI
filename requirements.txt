@@ -11,6 +11,8 @@ presidio-analyzer>=2.2
 # HTTP service (deployment entrypoint — see secure_context_pipeline/api.py)
 fastapi>=0.110
 uvicorn[standard]>=0.29
+python-multipart>=0.0.9   # PDF/file uploads (/process-pdf)
+pypdf>=4.0                # PDF text extraction (/process-pdf)
 
 # Real LLM leg (optional — MockProvider is the keyless default).
 # Gemini is the intended real provider for this deployment (google-genai SDK).
