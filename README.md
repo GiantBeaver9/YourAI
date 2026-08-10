@@ -55,6 +55,53 @@ runs via [`scripts/test_api.bat`](scripts/test_api.bat) (Windows) or
 
 ---
 
+## API reference
+
+All endpoints. Write endpoints require the `X-API-Key` header when `SCP_API_KEY` is set
+(otherwise they're open). JSON bodies are `{"text": "...", "task": "...", "doc_id": "optional"}`.
+
+| Method | Path | Auth | What it does |
+|---|---|---|---|
+| `GET` | `/health` | — | Liveness probe (Railway healthcheck). Returns `{"status":"ok"}`. |
+| `GET` | `/` | — | Service info: active detector, provider, `custom_rules_loaded`, endpoint list. |
+| `GET` | `/demo` | — | Browser test console (obfuscate + round-trip, token highlighting). |
+| `GET` | `/docs` | — | OpenAPI / Swagger UI. |
+| `GET` | `/rules` | key | Lists **all** rules — custom rows in full + built-in Safe Harbor rules. |
+| `POST` | `/obfuscate` | key | Returns only the **outbound payload** (obfuscated, no PII) + entity-type counts. |
+| `POST` | `/process` | key | Full round-trip **detect → obfuscate → LLM → restore**; returns restored text + meta. |
+| `POST` | `/process-pdf` | key | **PDF upload → extract text → same pipeline.** Scanned/image PDFs are quarantined. |
+
+### How each behaves
+
+- **`/obfuscate`** and **`/process`** take the same JSON body. `/obfuscate` stops at the wire
+  (great for proving zero PII leaves); `/process` runs the whole thing and restores tokens in
+  the reply. `/process` meta includes `detector`, `provider`, `entities_detected`,
+  `tokens_restored`, `deobfuscation_clean`.
+- **`/process-pdf`** is a `multipart/form-data` upload (`file=@doc.pdf`, optional `task` field).
+  Flow: **PDF bytes → text extraction (pypdf) → the normal `/process` pipeline.** A PDF with no
+  extractable text (scanned/image) returns `routed_to_human: true` with a reason instead of
+  being mis-processed — the image-quarantine policy.
+- **`/rules`** returns `{custom_rules, standard_rules, …counts}` so you can see exactly what's
+  active. Add custom rules via the file path above (there is no runtime write endpoint yet).
+
+### How to test (Windows CMD — swap in your domain)
+
+```cmd
+set BASE=https://YOUR-APP.up.railway.app
+set KEY=scp_yourkey
+
+curl %BASE%/health
+curl -H "X-API-Key: %KEY%" %BASE%/rules
+curl -s -X POST %BASE%/obfuscate -H "Content-Type: application/json" -H "X-API-Key: %KEY%" -d "{\"text\":\"SSN: 482-19-7734, MRN 4457812\"}"
+curl -s -X POST %BASE%/process   -H "Content-Type: application/json" -H "X-API-Key: %KEY%" -d "{\"text\":\"Patient: Jonathan Reyes, SSN 482-19-7734\",\"task\":\"Summarize.\"}"
+curl -s -X POST %BASE%/process-pdf -H "X-API-Key: %KEY%" -F "file=@note.pdf" -F "task=Summarize."
+```
+
+Or run the whole battery: `scripts\test_api.bat` (Windows) / `scripts/test_api.sh` (macOS/Linux).
+The browser console at `/demo` needs no shell quoting.
+
+---
+
 ## Design thesis: determinism is the security control
 
 The core requirement — *"contractual guarantees are not sufficient; we need a
